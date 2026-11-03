@@ -1,12 +1,11 @@
 /**
- * Ultra-Low-CPU 2.5D Sacred Temple Canvas Particle Engine
+ * Ultra-Low-CPU 2.5D Fishing Lake Canvas Particle Engine
  * Tối ưu hóa tối đa cho OBS / TikTok Live treo máy 24/7:
- * - Giới hạn đúng 30 FPS (tiết kiệm 50–75% CPU/GPU so với 60/120Hz)
- * - Tự động tạm dừng khi tab ẩn (document.hidden)
- * - Pre-render toàn bộ Khói hương, Hạt vàng, Cánh hoa sen ra Offscreen Canvas 1 lần duy nhất
- *   (KHÔNG gọi createRadialGradient, bezierCurveTo hay shadowBlur trong vòng lặp frame!)
+ * - Khóa cố định 30 FPS siêu mượt và siêu nhẹ CPU/GPU
+ * - Tự động tạm dừng khi ẩn tab (document.hidden)
+ * - Pre-render toàn bộ Bong bóng nước, Gợn sóng, Giọt nước bắn ra Offscreen Canvas 1 lần duy nhất
  */
-class TempleParticleEngine {
+class FishingParticleEngine {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
@@ -15,18 +14,16 @@ class TempleParticleEngine {
     this.canvas.width = this.width;
     this.canvas.height = this.height;
 
-    this.smokeParticles = [];
-    this.lotusPetals = [];
+    this.bubbles = [];
+    this.ripples = [];
+    this.droplets = [];
+    this.sunbeams = [];
+    this.fishes = [];
     this.goldSparks = [];
-    this.soundWaves = [];
-    this.floatingTexts = [];
-    this.burstParticles = [];
 
-    this.incenseTips = [];
-    this.smokeDensity = 1.0;
     this.time = 0;
     this.lastFrameTime = 0;
-    this.frameInterval = 1000 / 30; // Cố định 30 FPS siêu nhẹ CPU
+    this.frameInterval = 1000 / 30; // 30 FPS
 
     this.buildOffscreenSprites();
     this.initAmbientParticles();
@@ -35,305 +32,322 @@ class TempleParticleEngine {
   }
 
   buildOffscreenSprites() {
-    // 1. Pre-render Smoke Puff Sprite (64x64)
-    this.smokeSprite = document.createElement('canvas');
-    this.smokeSprite.width = 64;
-    this.smokeSprite.height = 64;
-    const sctx = this.smokeSprite.getContext('2d');
-    const sgrad = sctx.createRadialGradient(32, 32, 2, 32, 32, 30);
-    sgrad.addColorStop(0, 'rgba(255, 246, 218, 0.85)');
-    sgrad.addColorStop(0.5, 'rgba(238, 222, 185, 0.4)');
-    sgrad.addColorStop(1, 'rgba(220, 200, 160, 0)');
-    sctx.fillStyle = sgrad;
-    sctx.beginPath();
-    sctx.arc(32, 32, 30, 0, Math.PI * 2);
-    sctx.fill();
+    // 1. Pre-render Bubble Sprite (32x32)
+    this.bubbleSprite = document.createElement('canvas');
+    this.bubbleSprite.width = 32;
+    this.bubbleSprite.height = 32;
+    const bctx = this.bubbleSprite.getContext('2d');
+    bctx.beginPath();
+    bctx.arc(16, 16, 12, 0, Math.PI * 2);
+    bctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+    bctx.lineWidth = 1.8;
+    bctx.stroke();
+    // Highlight reflection spot
+    bctx.beginPath();
+    bctx.arc(12, 12, 3.5, 0, Math.PI * 2);
+    bctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    bctx.fill();
 
-    // 2. Pre-render Gold Spark Sprite (16x16)
+    // 2. Pre-render Sparkle Sprite (16x16)
     this.sparkSprite = document.createElement('canvas');
     this.sparkSprite.width = 16;
     this.sparkSprite.height = 16;
-    const gctx = this.sparkSprite.getContext('2d');
-    const ggrad = gctx.createRadialGradient(8, 8, 1, 8, 8, 7);
-    ggrad.addColorStop(0, 'rgba(255, 245, 190, 1)');
-    ggrad.addColorStop(0.5, 'rgba(255, 210, 90, 0.6)');
-    ggrad.addColorStop(1, 'rgba(255, 190, 50, 0)');
-    gctx.fillStyle = ggrad;
-    gctx.beginPath();
-    gctx.arc(8, 8, 7, 0, Math.PI * 2);
-    gctx.fill();
+    const sctx = this.sparkSprite.getContext('2d');
+    const sgrad = sctx.createRadialGradient(8, 8, 1, 8, 8, 7);
+    sgrad.addColorStop(0, 'rgba(255, 255, 220, 1)');
+    sgrad.addColorStop(0.5, 'rgba(129, 212, 250, 0.6)');
+    sgrad.addColorStop(1, 'rgba(3, 169, 244, 0)');
+    sctx.fillStyle = sgrad;
+    sctx.beginPath();
+    sctx.arc(8, 8, 7, 0, Math.PI * 2);
+    sctx.fill();
 
-    // 3. Pre-render Pink & Gold Lotus Petal Sprites (28x28)
-    this.pinkPetalSprite = this.createPetalSprite('rgba(248, 165, 194, 0.82)');
-    this.goldPetalSprite = this.createPetalSprite('rgba(255, 218, 110, 0.82)');
-  }
-
-  createPetalSprite(fillStyle) {
-    const c = document.createElement('canvas');
-    c.width = 28;
-    c.height = 28;
-    const pctx = c.getContext('2d');
-    const sz = 11;
-    pctx.translate(14, 14);
-    pctx.beginPath();
-    pctx.moveTo(0, -sz);
-    pctx.bezierCurveTo(sz * 0.85, -sz * 0.4, sz * 0.75, sz * 0.75, 0, sz);
-    pctx.bezierCurveTo(-sz * 0.75, sz * 0.75, -sz * 0.85, -sz * 0.4, 0, -sz);
-    pctx.fillStyle = fillStyle;
-    pctx.fill();
-    return c;
+    // 3. Pre-render Water Droplet Sprite (18x18)
+    this.dropSprite = document.createElement('canvas');
+    this.dropSprite.width = 18;
+    this.dropSprite.height = 18;
+    const dctx = this.dropSprite.getContext('2d');
+    const dgrad = dctx.createRadialGradient(9, 9, 1, 9, 9, 8);
+    dgrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+    dgrad.addColorStop(0.6, 'rgba(179, 229, 252, 0.7)');
+    dgrad.addColorStop(1, 'rgba(2, 136, 209, 0)');
+    dctx.fillStyle = dgrad;
+    dctx.beginPath();
+    dctx.arc(9, 9, 8, 0, Math.PI * 2);
+    dctx.fill();
   }
 
   initAmbientParticles() {
-    for (let i = 0; i < 20; i++) {
+    // Bong bóng nước nổi lên từ mặt hồ
+    for (let i = 0; i < 22; i++) {
+      this.bubbles.push({
+        x: 180 + Math.random() * 720,
+        y: 800 + Math.random() * 950,
+        size: 10 + Math.random() * 16,
+        vy: -(0.8 + Math.random() * 1.6),
+        vx: (Math.random() - 0.5) * 0.4,
+        alpha: 0.25 + Math.random() * 0.55,
+        wobble: Math.random() * Math.PI * 2
+      });
+    }
+
+    // Ánh nắng lấp lánh trên mặt hồ
+    for (let i = 0; i < 15; i++) {
       this.goldSparks.push({
-        x: Math.random() * this.width,
-        y: Math.random() * this.height,
-        size: 8 + Math.random() * 8,
-        vy: -(0.6 + Math.random() * 1.1),
-        vx: (Math.random() - 0.5) * 0.5,
+        x: 100 + Math.random() * 880,
+        y: 750 + Math.random() * 800,
+        size: 8 + Math.random() * 10,
         phase: Math.random() * Math.PI * 2,
-        alpha: 0.35 + Math.random() * 0.55
+        speed: 0.03 + Math.random() * 0.04
       });
     }
 
-    for (let i = 0; i < 9; i++) {
-      this.lotusPetals.push(this.createLotusPetal(true));
+    // Đàn cá bơi lội ngẫu nhiên dưới đáy hồ
+    for (let i = 0; i < 4; i++) {
+      this.spawnAmbientFish();
     }
   }
 
-  createLotusPetal(randomY = false) {
-    return {
-      x: Math.random() * this.width,
-      y: randomY ? Math.random() * this.height : -30 - Math.random() * 100,
-      scale: 0.7 + Math.random() * 0.55,
-      vy: 1.2 + Math.random() * 1.5,
-      vx: (Math.random() - 0.5) * 0.9,
-      rot: Math.random() * Math.PI * 2,
-      vrot: (Math.random() - 0.5) * 0.035,
-      swayPhase: Math.random() * Math.PI * 2,
-      gold: Math.random() > 0.6
-    };
-  }
-
-  setIncenseTips(tips) {
-    this.incenseTips = Array.isArray(tips) ? tips : [];
-  }
-
-  spawnSmokeFromTips() {
-    if (!this.incenseTips.length || this.smokeParticles.length >= 22) return;
-    if (Math.random() > 0.45 * this.smokeDensity) return;
-
-    const tip = this.incenseTips[Math.floor(Math.random() * this.incenseTips.length)];
-    this.smokeParticles.push({
-      x: tip.x + (Math.random() - 0.5) * 6,
-      y: tip.y,
-      vx: (Math.random() - 0.5) * 0.25,
-      vy: -(2.4 + Math.random() * 1.0),
-      radius: 8 + Math.random() * 5,
-      maxRadius: 28 + Math.random() * 16,
-      alpha: 0.24 + Math.random() * 0.1,
-      age: 0,
-      maxAge: 68 + Math.random() * 25,
-      seed: Math.random() * 50
+  spawnAmbientFish() {
+    const dir = Math.random() > 0.5 ? 1 : -1;
+    this.fishes.push({
+      x: dir > 0 ? -120 : this.width + 120,
+      y: 950 + Math.random() * 750,
+      vx: dir * (1.2 + Math.random() * 1.5),
+      size: 28 + Math.random() * 32,
+      scaleY: 0.45,
+      alpha: 0.18 + Math.random() * 0.22,
+      dir,
+      wave: Math.random() * Math.PI * 2
     });
   }
 
-  spawnIncenseBurst(x = 540, y = 890) {
-    for (let i = 0; i < 18; i++) {
-      const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.1;
+  // Kích hoạt khi thả thính / ném mồi
+  addBaitDrop(x = 540, y = 1180, count = 1) {
+    // Thêm các gợn sóng đồng tâm
+    for (let i = 0; i < 3; i++) {
+      this.ripples.push({
+        x: x + (Math.random() - 0.5) * 40,
+        y: y + (Math.random() - 0.5) * 30,
+        radius: 6,
+        maxRadius: 80 + Math.random() * 60,
+        alpha: 0.85,
+        growth: 2.2 + i * 0.6
+      });
+    }
+
+    // Giọt nước bắn lên
+    const dropCount = Math.min(24, count * 3);
+    for (let i = 0; i < dropCount; i++) {
+      const angle = (Math.PI * 2 * i) / dropCount + Math.random() * 0.3;
       const speed = 2.5 + Math.random() * 5.0;
-      this.burstParticles.push({
+      this.droplets.push({
         x,
         y,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        r: 2.5 + Math.random() * 3.0,
-        alpha: 1,
-        decay: 0.035 + Math.random() * 0.02,
-        color: i % 2 === 0 ? '#ffdf85' : '#ff9e44'
+        vy: -Math.abs(Math.sin(angle) * speed * 1.4) - 2.5,
+        gravity: 0.28,
+        alpha: 1.0,
+        size: 8 + Math.random() * 8
+      });
+    }
+
+    // Sủi bọt nước
+    for (let i = 0; i < 8; i++) {
+      this.bubbles.push({
+        x: x + (Math.random() - 0.5) * 60,
+        y: y + 20 + Math.random() * 80,
+        size: 12 + Math.random() * 14,
+        vy: -(1.5 + Math.random() * 2.0),
+        vx: (Math.random() - 0.5) * 0.8,
+        alpha: 0.8,
+        wobble: Math.random() * Math.PI * 2
       });
     }
   }
 
-  spawnBellWave(x = 540, y = 510, count = 2) {
-    for (let i = 0; i < Math.min(count, 2); i++) {
-      this.soundWaves.push({
+  // Kích hoạt khi giật cá / bắt được cá to
+  addFishCatch(x = 540, y = 1180, isBig = false) {
+    const mult = isBig ? 2.2 : 1.2;
+    for (let i = 0; i < 5; i++) {
+      this.ripples.push({
         x,
         y,
-        radius: 34 + i * 24,
-        maxRadius: 420 + i * 50,
-        alpha: 0.72 - i * 0.16,
-        lineWidth: 3 - i * 0.6
+        radius: 10 + i * 15,
+        maxRadius: 180 * mult,
+        alpha: 0.95,
+        growth: 3.8 + i * 1.1
       });
     }
-  }
 
-  spawnFloatingMerit(text = '+1 Công Đức', x = 540, y = 940, color = '#ffe082') {
-    if (this.floatingTexts.length > 8) this.floatingTexts.shift();
-    this.floatingTexts.push({
-      text,
-      x: x + (Math.random() - 0.5) * 36,
-      y,
-      vy: -3.2,
-      alpha: 1.0,
-      color
-    });
-  }
-
-  spawnGrandCeremonyRain() {
-    for (let i = 0; i < 16; i++) {
-      this.lotusPetals.push(this.createLotusPetal(false));
-    }
-    for (let i = 0; i < 36; i++) {
-      const angle = (Math.PI * 2 * i) / 36;
-      const speed = 3.5 + Math.random() * 7.5;
-      this.burstParticles.push({
-        x: 540,
-        y: 510,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        r: 3 + Math.random() * 3.5,
-        alpha: 1,
-        decay: 0.022 + Math.random() * 0.015,
-        color: i % 3 === 0 ? '#fff3b0' : i % 3 === 1 ? '#ffb703' : '#ff7aa2'
+    const dropTotal = isBig ? 60 : 35;
+    for (let i = 0; i < dropTotal; i++) {
+      const angle = Math.random() * Math.PI;
+      const speed = (4.0 + Math.random() * 8.0) * mult;
+      this.droplets.push({
+        x: x + (Math.random() - 0.5) * 50,
+        y,
+        vx: (Math.random() - 0.5) * speed * 1.5,
+        vy: -Math.abs(Math.sin(angle) * speed * 1.8) - 4.0,
+        gravity: 0.32,
+        alpha: 1.0,
+        size: 9 + Math.random() * 10
       });
     }
+
+    if (isBig) {
+      // Bão bong bóng nước
+      for (let i = 0; i < 30; i++) {
+        this.bubbles.push({
+          x: x + (Math.random() - 0.5) * 160,
+          y: y + Math.random() * 200,
+          size: 14 + Math.random() * 18,
+          vy: -(2.5 + Math.random() * 3.5),
+          vx: (Math.random() - 0.5) * 1.8,
+          alpha: 0.9,
+          wobble: Math.random() * Math.PI * 2
+        });
+      }
+    }
   }
 
-  animate(timestamp) {
+  animate(now) {
     requestAnimationFrame(this.animate);
-
     if (document.hidden) return;
-    if (timestamp - this.lastFrameTime < this.frameInterval) return;
-    this.lastFrameTime = timestamp;
 
-    this.time += 0.035;
-    const ctx = this.ctx;
-    ctx.clearRect(0, 0, this.width, this.height);
+    const elapsed = now - this.lastFrameTime;
+    if (elapsed < this.frameInterval) return;
+    this.lastFrameTime = now - (elapsed % this.frameInterval);
+    this.time += 0.03;
 
-    // 1. Hạt bụi vàng (dùng drawImage từ sparkSprite đã pre-render)
-    for (let i = 0; i < this.goldSparks.length; i++) {
-      const sp = this.goldSparks[i];
-      sp.y += sp.vy;
-      sp.x += sp.vx + Math.sin(this.time + sp.phase) * 0.4;
-      if (sp.y < -20) {
-        sp.y = this.height + 15;
-        sp.x = Math.random() * this.width;
-      }
-      ctx.globalAlpha = sp.alpha * (0.55 + 0.45 * Math.sin(this.time * 2.0 + sp.phase));
-      ctx.drawImage(this.sparkSprite, sp.x - sp.size * 0.5, sp.y - sp.size * 0.5, sp.size, sp.size);
-    }
+    this.ctx.clearRect(0, 0, this.width, this.height);
 
-    // 2. Khói tâm hương (dùng drawImage từ smokeSprite đã pre-render)
-    this.spawnSmokeFromTips();
-    for (let i = this.smokeParticles.length - 1; i >= 0; i--) {
-      const p = this.smokeParticles[i];
-      p.age += 1;
-      if (p.age >= p.maxAge || p.y < 495) {
-        this.smokeParticles.splice(i, 1);
-        continue;
-      }
-      const progress = p.age / p.maxAge;
-      const curl = Math.sin(this.time * 1.5 + p.seed + p.y * 0.014) * 0.55;
-      p.x += p.vx + curl * (0.3 + progress * 0.5);
-      p.y += p.vy;
+    // 1. Vẽ bóng cá bơi dưới nước
+    this.renderFishSilhouettes();
 
-      const r = p.radius + (p.maxRadius - p.radius) * progress;
-      const fade = Math.sin(progress * Math.PI) * p.alpha * (1 - progress * 0.6);
-      ctx.globalAlpha = Math.max(0, fade);
-      ctx.drawImage(this.smokeSprite, p.x - r, p.y - r, r * 2, r * 2);
-    }
+    // 2. Vẽ gợn sóng tròn lan tỏa trên mặt hồ
+    this.renderRipples();
 
-    // 3. Cánh hoa sen rơi (dùng drawImage từ petalSprite đã pre-render)
-    ctx.globalAlpha = 1;
-    for (let i = this.lotusPetals.length - 1; i >= 0; i--) {
-      const petal = this.lotusPetals[i];
-      petal.y += petal.vy;
-      petal.x += petal.vx + Math.sin(this.time + petal.swayPhase) * 0.7;
-      petal.rot += petal.vrot;
+    // 3. Vẽ bong bóng nước nổi lên
+    this.renderBubbles();
 
-      if (petal.y > this.height + 35) {
-        if (this.lotusPetals.length > 9) {
-          this.lotusPetals.splice(i, 1);
-          continue;
-        } else {
-          Object.assign(petal, this.createLotusPetal(false));
+    // 4. Vẽ giọt nước bắn tung tóe
+    this.renderDroplets();
+
+    // 5. Vẽ ánh nắng lấp lánh mặt hồ
+    this.renderSparks();
+  }
+
+  renderFishSilhouettes() {
+    for (let i = this.fishes.length - 1; i >= 0; i--) {
+      const f = this.fishes[i];
+      f.x += f.vx;
+      f.wave += 0.06;
+      const waveY = f.y + Math.sin(f.wave) * 12;
+
+      this.ctx.save();
+      this.ctx.translate(f.x, waveY);
+      this.ctx.scale(f.dir, 1);
+      this.ctx.fillStyle = `rgba(18, 55, 65, ${f.alpha})`;
+
+      // Vẽ hình bóng cá đơn giản (oval + đuôi vẫy)
+      this.ctx.beginPath();
+      this.ctx.ellipse(0, 0, f.size, f.size * f.scaleY, 0, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      // Đuôi cá vẫy
+      const tailOffset = Math.sin(f.wave * 1.5) * 6;
+      this.ctx.beginPath();
+      this.ctx.moveTo(-f.size * 0.8, 0);
+      this.ctx.lineTo(-f.size * 1.4, -f.size * 0.4 + tailOffset);
+      this.ctx.lineTo(-f.size * 1.4, f.size * 0.4 + tailOffset);
+      this.ctx.closePath();
+      this.ctx.fill();
+      this.ctx.restore();
+
+      if ((f.dir > 0 && f.x > this.width + 150) || (f.dir < 0 && f.x < -150)) {
+        this.fishes.splice(i, 1);
+        if (this.fishes.length < 5) {
+          this.spawnAmbientFish();
         }
       }
-
-      ctx.save();
-      ctx.translate(petal.x, petal.y);
-      ctx.rotate(petal.rot);
-      const sz = 28 * petal.scale;
-      ctx.drawImage(
-        petal.gold ? this.goldPetalSprite : this.pinkPetalSprite,
-        -sz * 0.5,
-        -sz * 0.5,
-        sz,
-        sz
-      );
-      ctx.restore();
     }
+  }
 
-    // 4. Sóng âm Đại Hồng Chung
-    for (let i = this.soundWaves.length - 1; i >= 0; i--) {
-      const w = this.soundWaves[i];
-      w.radius += 10.5;
-      w.alpha *= 0.94;
-      if (w.radius >= w.maxRadius || w.alpha < 0.03) {
-        this.soundWaves.splice(i, 1);
+  renderRipples() {
+    this.ctx.save();
+    for (let i = this.ripples.length - 1; i >= 0; i--) {
+      const r = this.ripples[i];
+      r.radius += r.growth;
+      r.alpha -= 0.015;
+
+      if (r.alpha <= 0 || r.radius >= r.maxRadius) {
+        this.ripples.splice(i, 1);
         continue;
       }
-      ctx.globalAlpha = w.alpha;
-      ctx.strokeStyle = '#ffd666';
-      ctx.lineWidth = w.lineWidth;
-      ctx.beginPath();
-      ctx.arc(w.x, w.y, w.radius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
 
-    // 5. Hạt pháo hoa sen
-    for (let i = this.burstParticles.length - 1; i >= 0; i--) {
-      const b = this.burstParticles[i];
-      b.x += b.vx;
+      this.ctx.strokeStyle = `rgba(220, 245, 255, ${r.alpha * 0.75})`;
+      this.ctx.lineWidth = 2.2;
+      this.ctx.beginPath();
+      // Vẽ elip dẹt mô phỏng góc nhìn nghiêng 2.5D mặt hồ
+      this.ctx.ellipse(r.x, r.y, r.radius, r.radius * 0.45, 0, 0, Math.PI * 2);
+      this.ctx.stroke();
+    }
+    this.ctx.restore();
+  }
+
+  renderBubbles() {
+    for (let i = 0; i < this.bubbles.length; i++) {
+      const b = this.bubbles[i];
       b.y += b.vy;
-      b.vy += 0.08;
-      b.alpha -= b.decay;
-      if (b.alpha <= 0) {
-        this.burstParticles.splice(i, 1);
+      b.wobble += 0.05;
+      b.x += Math.sin(b.wobble) * 0.5 + b.vx;
+
+      this.ctx.globalAlpha = b.alpha;
+      this.ctx.drawImage(this.bubbleSprite, b.x - b.size / 2, b.y - b.size / 2, b.size, b.size);
+
+      // Khi nổi lên mặt nước (khoảng y <= 720) thì reset lại xuống đáy
+      if (b.y < 720) {
+        b.y = 1500 + Math.random() * 400;
+        b.x = 180 + Math.random() * 720;
+      }
+    }
+    this.ctx.globalAlpha = 1.0;
+  }
+
+  renderDroplets() {
+    for (let i = this.droplets.length - 1; i >= 0; i--) {
+      const d = this.droplets[i];
+      d.x += d.vx;
+      d.vy += d.gravity;
+      d.y += d.vy;
+      d.alpha -= 0.022;
+
+      if (d.alpha <= 0 || d.y > 1800) {
+        this.droplets.splice(i, 1);
         continue;
       }
-      ctx.globalAlpha = Math.max(0, b.alpha);
-      ctx.fillStyle = b.color;
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
 
-    // 6. Chữ +Công Đức bay lên (dùng strokeText thay vì shadowBlur tốn CPU)
-    if (this.floatingTexts.length > 0) {
-      ctx.font = '800 27px "Be Vietnam Pro", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(15, 4, 2, 0.9)';
-      for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
-        const ft = this.floatingTexts[i];
-        ft.y += ft.vy;
-        ft.alpha -= 0.032;
-        if (ft.alpha <= 0) {
-          this.floatingTexts.splice(i, 1);
-          continue;
-        }
-        ctx.globalAlpha = Math.max(0, ft.alpha);
-        ctx.strokeText(ft.text, ft.x, ft.y);
-        ctx.fillStyle = ft.color;
-        ctx.fillText(ft.text, ft.x, ft.y);
-      }
+      this.ctx.globalAlpha = Math.max(0, d.alpha);
+      this.ctx.drawImage(this.dropSprite, d.x - d.size / 2, d.y - d.size / 2, d.size, d.size);
     }
+    this.ctx.globalAlpha = 1.0;
+  }
 
-    ctx.globalAlpha = 1;
+  renderSparks() {
+    for (let i = 0; i < this.goldSparks.length; i++) {
+      const s = this.goldSparks[i];
+      s.phase += s.speed;
+      const alpha = 0.3 + Math.sin(s.phase) * 0.45;
+      if (alpha <= 0.02) continue;
+
+      this.ctx.globalAlpha = alpha;
+      this.ctx.drawImage(this.sparkSprite, s.x - s.size / 2, s.y - s.size / 2, s.size, s.size);
+    }
+    this.ctx.globalAlpha = 1.0;
   }
 }
 
-window.TempleParticleEngine = TempleParticleEngine;
+// Global initialization
+window.FishingParticleEngine = FishingParticleEngine;
+window.TempleParticleEngine = FishingParticleEngine; // Alias

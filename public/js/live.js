@@ -1,845 +1,582 @@
 /**
- * Live 9:16 Client Controller — Chánh Điện Đức Phật A Di Đà & Đạo Tràng Phật Tử Quỳ Lễ
- * - Hiển thị 6 Đệm Quỳ VIP (Top 6 Bảng Vàng Công Đức)
- * - Hiển thị 40 Phật Tử mặc áo lam quỳ hai bên thảm đỏ + thẻ tên người xem
- * - Hiệu ứng người xem bước dọc thảm đỏ lên trước Lư Hương Đồng dâng hương
- * - Giọng đọc ZeroTTS (Mai Chi) + Pháp khí Web Audio
+ * Fishing Lake Live Controller & WebSocket Client
+ * - Tự động co giãn khung hình 9:16 (1080x1920) chuẩn xác theo màn hình
+ * - Kết nối thời gian thực qua WebSocket (/ws) với JSON-RPC 2.0
+ * - Điều phối hiệu ứng phao câu, cần thủ, âm thanh và giọng đọc ZeroTTS Mai Chi
  */
 (function () {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('obs') === '1') {
+  'use strict';
+
+  // 1. Kiểm tra tham số ?obs=1 để kích hoạt chế độ OBS Studio sạch (không dock)
+  const urlParams = new URLSearchParams(window.location.search);
+  const isObsMode = urlParams.get('obs') === '1' || urlParams.get('obs') === 'true';
+  if (isObsMode) {
     document.body.classList.add('obs-mode');
   }
 
-  // 1. Tự động co giãn khung 1080x1920 vừa khít Stage Wrapper (9:16)
+  // 2. Tự động co giãn 9:16 (Auto Scale)
+  const stage = document.getElementById('stage9x16');
   const stageWrapper = document.getElementById('stageWrapper');
-  const stage9x16 = document.getElementById('stage9x16');
 
-  function fitStage() {
-    if (!stageWrapper || !stage9x16) return;
-    const rect = stageWrapper.getBoundingClientRect();
-    const scale = rect.width / 1080;
-    stage9x16.style.transform = `scale(${scale})`;
+  function resizeStage() {
+    if (!stage || !stageWrapper) return;
+    const availWidth = stageWrapper.clientWidth;
+    const availHeight = stageWrapper.clientHeight;
+    const scale = Math.min(availWidth / 1080, availHeight / 1920);
+    stage.style.transform = `scale(${scale})`;
   }
-  window.addEventListener('resize', fitStage);
-  fitStage();
+  window.addEventListener('resize', resizeStage);
+  resizeStage();
 
-  // 2. Khởi tạo Particle Engine & Audio Engine (ZeroTTS Mai Chi)
-  const canvas = document.getElementById('templeCanvas');
-  const particles = new window.TempleParticleEngine(canvas);
-  const audio = new window.TempleAudioEngine();
-
-  function unlockAudioOnce() {
-    audio.ensureContext();
-    const btnUnlock = document.getElementById('btnUnlockAudio');
-    if (btnUnlock) {
-      btnUnlock.textContent = '✅ Âm Thanh Chùa Đã Sẵn Sàng';
-      btnUnlock.classList.remove('gold');
-      btnUnlock.classList.add('active-toggle');
-    }
-  }
-  window.addEventListener('pointerdown', unlockAudioOnce, { once: true });
-
-  // 3. Vẽ các nén nhang đang cháy trong Lư Hương Đỉnh Đồng (x=540, y=895)
-  const incenseHolder = document.getElementById('incenseSticksHolder');
-  let renderedStickCount = 0;
-
-  function renderIncenseSticks(count) {
-    const target = Math.max(3, Math.min(27, Number(count) || 9));
-    if (target === renderedStickCount && incenseHolder.children.length > 0) return;
-    renderedStickCount = target;
-    incenseHolder.innerHTML = '';
-
-    const tips = [];
-    for (let i = 0; i < target; i++) {
-      const stick = document.createElement('div');
-      stick.className = 'incense-stick';
-
-      const spread = target === 1 ? 0 : (i / (target - 1) - 0.5) * 2;
-      const leftPx = 65 + spread * 28 + Math.sin(i * 2.1) * 2;
-      const angleDeg = spread * 12 + Math.cos(i * 1.5) * 1.5;
-      const heightPx = 76 + (i % 3) * 6;
-
-      stick.style.left = `${leftPx}px`;
-      stick.style.height = `${heightPx}px`;
-      stick.style.transform = `rotate(${angleDeg}deg)`;
-
-      const ember = document.createElement('div');
-      ember.className = 'incense-ember';
-      ember.style.animationDelay = `${(i * 0.15) % 1.1}s`;
-      stick.appendChild(ember);
-      incenseHolder.appendChild(stick);
-
-      const rad = (angleDeg * Math.PI) / 180;
-      const tipX = 540 + (leftPx - 65) + Math.sin(rad) * heightPx;
-      const tipY = 895 - Math.cos(rad) * heightPx;
-      tips.push({ x: tipX, y: tipY });
-    }
-    particles.setIncenseTips(tips);
+  // 3. Khởi tạo Canvas Particle Engine
+  const canvas = document.getElementById('fishingCanvas');
+  let particleEngine = null;
+  if (canvas && window.FishingParticleEngine) {
+    particleEngine = new window.FishingParticleEngine(canvas);
   }
 
-  // 4. Dựng Hàng 6 Đệm Quỳ VIP (Top 6 Thí Chủ trên bục gỗ y=1188)
-  const VIP_CUSHION_COORDS = [
-    { x: 140, y: 1188, rank: 1 },
-    { x: 268, y: 1188, rank: 2 },
-    { x: 392, y: 1188, rank: 3 },
-    { x: 688, y: 1188, rank: 4 },
-    { x: 812, y: 1188, rank: 5 },
-    { x: 940, y: 1188, rank: 6 }
-  ];
+  // 4. Các phần tử DOM chính
+  const bobberBody = document.getElementById('bobberBody');
+  const anglerSpriteImg = document.getElementById('anglerSpriteImg');
+  const anglerWishBubble = document.getElementById('anglerWishBubble');
+  const anglerName = document.getElementById('anglerName');
+  const anglerAction = document.getElementById('anglerAction');
+  const anglerAvatar = document.getElementById('anglerAvatar');
 
-  function renderVipCushions(leaderboard = []) {
-    const layer = document.getElementById('vipCushionsLayer');
-    if (!layer) return;
+  const statCatches = document.getElementById('statCatches');
+  const statWeight = document.getElementById('statWeight');
+  const statBait = document.getElementById('statBait');
+  const statHorn = document.getElementById('statHorn');
 
-    layer.innerHTML = VIP_CUSHION_COORDS.map((slot, idx) => {
-      const dev = leaderboard[idx];
-      if (!dev) return '';
-      return `
-        <div class="vip-devotee-slot" style="left: ${slot.x}px; top: ${slot.y}px; z-index: ${12 + idx};">
-          <img src="/assets/devotee.png" alt="VIP Devotee" class="devotee-sprite" />
-          <div class="vip-rank-pill">
-            <span class="vip-rank-num">${slot.rank}</span>
-            <span class="vip-rank-name">${escapeHtml(shortenName(dev.name, 12))}</span>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
+  const liveStatusText = document.getElementById('liveStatusText');
+  const liveDot = document.getElementById('liveDot');
 
-  // 5. Dựng Đạo Tràng 40 Phật Tử Quỳ Lễ Hai Bên Thảm Đỏ (5 Hàng x 4 Cột mỗi bên)
-  const congregationHall = document.getElementById('congregationHall');
-  const HALL_SEAT_COORDS = [];
+  const activeAnglerName = document.getElementById('activeAnglerName');
+  const activeActionTag = document.getElementById('activeActionTag');
+  const leaderboardList = document.getElementById('leaderboardList');
+  const vipStoolsLayer = document.getElementById('vipStoolsLayer');
+  const eventFeed = document.getElementById('eventFeed');
 
-  (function buildHallGrid() {
-    const rows = 5;
-    const colsPerSide = 4;
-    for (let r = 0; r < rows; r++) {
-      const progress = r / (rows - 1); // 0 (xa) -> 1 (gần)
-      const y = Math.round(1290 + progress * 355); // 1290 -> 1645
-      const scale = +(0.76 + progress * 0.28).toFixed(2);
+  // Modal & Banner
+  const catchModal = document.getElementById('catchModal');
+  const catchBadge = document.getElementById('catchBadge');
+  const catchIcon = document.getElementById('catchIcon');
+  const catchFishName = document.getElementById('catchFishName');
+  const catchWeight = document.getElementById('catchWeight');
+  const catchAnglerName = document.getElementById('catchAnglerName');
+  const catchQuote = document.getElementById('catchQuote');
 
-      // Cánh trái thảm đỏ
-      const leftInnerX = Math.round(335 - progress * 48); // mép thảm mở rộng dần
-      const leftOuterX = 48;
-      for (let c = 0; c < colsPerSide; c++) {
-        const t = c / (colsPerSide - 1);
-        const x = Math.round(leftOuterX + t * (leftInnerX - leftOuterX));
-        HALL_SEAT_COORDS.push({ side: 'L', row: r, col: c, x, y, scale });
-      }
+  const leviathanBanner = document.getElementById('leviathanBanner');
+  const leviathanTitle = document.getElementById('leviathanTitle');
+  const leviathanSub = document.getElementById('leviathanSub');
 
-      // Cánh phải thảm đỏ
-      const rightInnerX = Math.round(745 + progress * 48);
-      const rightOuterX = 1032;
-      for (let c = 0; c < colsPerSide; c++) {
-        const t = c / (colsPerSide - 1);
-        const x = Math.round(rightInnerX + t * (rightOuterX - rightInnerX));
-        HALL_SEAT_COORDS.push({ side: 'R', row: r, col: c, x, y, scale });
-      }
-    }
-  })();
-
-  let lastRenderedLeaderboardJson = '';
-
-  function renderCongregationHall(leaderboard = []) {
-    if (!congregationHall) return;
-    // Những người xếp từ hạng 7 trở đi ngồi ở các vị trí đầu tiên cạnh thảm đỏ
-    const hallViewers = leaderboard.slice(6);
-    const sig = JSON.stringify(hallViewers.map((d) => `${d.name}:${d.merit}`));
-    if (sig === lastRenderedLeaderboardJson && congregationHall.children.length > 0) return;
-    lastRenderedLeaderboardJson = sig;
-
-    // Ưu tiên gắn thẻ tên vào các ghế gần thảm đỏ dễ nhìn nhất
-    const labeledSeatIndices = [
-      3, 4, 11, 12, 19, 20, 27, 28, 35, 36, 2, 5, 10, 13, 18, 21, 26, 29
-    ];
-    const seatViewerMap = new Map();
-    hallViewers.forEach((viewer, idx) => {
-      if (idx < labeledSeatIndices.length) {
-        seatViewerMap.set(labeledSeatIndices[idx], viewer);
-      }
-    });
-
-    congregationHall.innerHTML = HALL_SEAT_COORDS.map((seat, idx) => {
-      const viewer = seatViewerMap.get(idx);
-      const badgeHtml = viewer
-        ? `
-          <div class="seat-badge">
-            <span class="seat-avatar">${
-              viewer.avatar
-                ? `<img src="${escapeHtml(viewer.avatar)}" alt="" />`
-                : escapeHtml(String(viewer.name || 'P').charAt(0).toUpperCase())
-            }</span>
-            <span class="seat-username">${escapeHtml(shortenName(viewer.name, 11))}</span>
-          </div>
-        `
-        : '';
-
-      return `
-        <div
-          class="hall-seat"
-          data-seat-idx="${idx}"
-          style="left: ${seat.x}px; top: ${seat.y}px; z-index: ${20 + seat.row * 2}; transform: translate(-50%, -100%) scale(${seat.scale});"
-        >
-          <img
-            src="/assets/devotee.png"
-            alt="Phật tử"
-            class="devotee-sprite"
-            style="animation-delay: ${((idx * 0.27) % 3.5).toFixed(2)}s;"
-          />
-          ${badgeHtml}
-        </div>
-      `;
-    }).join('');
-  }
-
-  // Preload toàn bộ 8 frame nhân vật vào bộ nhớ để chuyển frame mượt 0ms
-  const SPRITE_FRAMES = {
-    walk1: '/assets/devotee_walk.png',
-    walk2: '/assets/devotee_walk_2.png',
-    kneelDown: '/assets/devotee_kneel_down.png',
-    kneel: '/assets/devotee.png',
-    forehead: '/assets/devotee_bow.png',
-    bowMid: '/assets/devotee_bow_mid.png',
-    prostrate: '/assets/devotee_prostrate.png',
-    prostrateDeep: '/assets/devotee_prostrate_deep.png'
-  };
-  Object.values(SPRITE_FRAMES).forEach((url) => {
-    const img = new Image();
-    img.src = url;
-  });
-
-  function pulseHallBowing() {
-    if (!congregationHall) return;
-    const seats = congregationHall.querySelectorAll('.hall-seat');
-    seats.forEach((el, i) => {
-      if (i % 4 !== 0) return;
-      const img = el.querySelector('.devotee-sprite');
-      if (!img) return;
-      const delay = (i % 4) * 80;
-      setTimeout(() => { img.src = SPRITE_FRAMES.forehead; }, delay);
-      setTimeout(() => { img.src = SPRITE_FRAMES.bowMid; }, delay + 140);
-      setTimeout(() => { img.src = SPRITE_FRAMES.prostrateDeep; }, delay + 300);
-      setTimeout(() => { img.src = SPRITE_FRAMES.bowMid; }, delay + 620);
-      setTimeout(() => { img.src = SPRITE_FRAMES.kneel; }, delay + 780);
-    });
-  }
-
-  let prostrationTimers = [];
-  function clearProstrationTimers() {
-    while (prostrationTimers.length > 0) {
-      clearTimeout(prostrationTimers.pop());
-    }
-  }
-
-  // Chuyển đổi tức thời giữa 8 khung hình đã giải mã sẵn trên GPU (KHÔNG BAO GIỜ BỊ MẤT HÌNH)
-  function setCentralPose(poseKey) {
-    const stack = document.getElementById('centralSpriteStack');
-    if (!stack) return;
-    const frames = stack.querySelectorAll('.pose-frame');
-    frames.forEach((img) => {
-      img.classList.toggle('active', img.getAttribute('data-pose') === poseKey);
-    });
-  }
-
-  function schedulePose(ms, poseKey) {
-    prostrationTimers.push(
-      setTimeout(() => {
-        setCentralPose(poseKey);
-      }, ms)
-    );
-  }
-
-  // Chuỗi 8 khung hình Đảnh lễ Tam Bái mượt mà (Hạ gối -> Chắp tay ngực -> Đưa lên trán -> Nghiêng 45° -> Chống tay -> Lạy sát đất -> Ngẩng lên)
-  function playThreeBowsSequence(startDelayMs = 0) {
-    schedulePose(startDelayMs, 'kneelDown');
-    schedulePose(startDelayMs + 160, 'kneel');
-
-    const bowOffsets = [startDelayMs + 320, startDelayMs + 1820, startDelayMs + 3320];
-    bowOffsets.forEach((t0) => {
-      schedulePose(t0, 'forehead');            // 1. Chắp tay đưa lên trán
-      schedulePose(t0 + 170, 'bowMid');        // 2. Cúi gập lưng 45°
-      schedulePose(t0 + 330, 'prostrate');     // 3. Vươn hai tay chống xuống đệm
-      schedulePose(t0 + 490, 'prostrateDeep'); // 4. Lạy sát đất (Ngũ thể đầu địa)
-      schedulePose(t0 + 860, 'prostrate');     // 5. Bắt đầu nâng đầu lên
-      schedulePose(t0 + 1020, 'bowMid');       // 6. Nâng lưng lên góc 45°
-      schedulePose(t0 + 1180, 'kneel');        // 7. Ngồi quỳ thẳng lưng
-    });
-
-    schedulePose(startDelayMs + 4800, 'forehead');
-    schedulePose(startDelayMs + 5350, 'kneel');
-  }
-
-  // Hiệu ứng thí chủ ĐỨNG ĐI BỘ từng bước dọc thảm đỏ rồi Hạ gối Quỳ Đảnh Lễ (trên cùng 1 nhân vật, không bao giờ mất hình)
-  function animateWalkerOnCarpet(user, avatar, actionLabel, wish) {
-    const centralEl = document.getElementById('centralWorshipper');
-    if (!centralEl) return;
-
-    clearProstrationTimers();
-    updateCentralWorshipper(user, avatar, actionLabel, wish, false);
-
-    // Khởi động bước đi từ cuối thảm đỏ lên chính điện
-    centralEl.classList.remove('walking-up');
-    void centralEl.offsetWidth;
-    centralEl.classList.add('walking-up');
-
-    setCentralPose('walk1');
-    for (let step = 1; step <= 10; step++) {
-      schedulePose(step * 185, step % 2 === 0 ? 'walk1' : 'walk2');
-    }
-
-    // Khi bước tới trước Lư Hương (2.05s): dừng bước, hạ gối quỳ xuống đệm và bắt đầu Đảnh lễ 3 lạy
-    prostrationTimers.push(
-      setTimeout(() => {
-        centralEl.classList.remove('walking-up');
-      }, 2100)
-    );
-    playThreeBowsSequence(2050);
-  }
-
-  function updateCentralWorshipper(user, avatar, actionLabel, wish, doThreeBows = true) {
-    const nameEl = document.getElementById('centralName');
-    const actEl = document.getElementById('centralAction');
-    const wishEl = document.getElementById('centralWishBubble');
-    const avatarEl = document.getElementById('centralAvatar');
-    const beam = document.getElementById('sacredLightBeam');
-
-    if (nameEl) nameEl.textContent = user || 'Thí Chủ Hữu Duyên';
-    if (actEl) actEl.textContent = actionLabel || '✨ Dâng hương cầu an';
-    if (wishEl) wishEl.textContent = `“${wish || 'Nam Mô A Di Đà Phật, cầu bình an cát tường'}”`;
-
-    if (avatarEl) {
-      if (avatar) {
-        avatarEl.innerHTML = `<img src="${escapeHtml(avatar)}" alt="" />`;
-      } else {
-        avatarEl.textContent = String(user || '🙏').trim().charAt(0).toUpperCase();
-      }
-    }
-
-    if (doThreeBows) {
-      clearProstrationTimers();
-      const centralEl = document.getElementById('centralWorshipper');
-      if (centralEl) centralEl.classList.remove('walking-up');
-      playThreeBowsSequence(0);
-    }
-    if (beam) {
-      beam.classList.add('intense');
-      setTimeout(() => beam.classList.remove('intense'), 4500);
-    }
-
-    const haloSys = document.getElementById('buddhaHaloSystem');
-    const lotusHand = document.getElementById('lotusHandHalo');
-    if (haloSys) {
-      haloSys.classList.add('flare');
-      setTimeout(() => haloSys.classList.remove('flare'), 3600);
-    }
-    if (lotusHand) {
-      lotusHand.classList.add('flare');
-      setTimeout(() => lotusHand.classList.remove('flare'), 3600);
-    }
-    particles.spawnBellWave(540, 260, 2);
-
-    // Cập nhật dòng thông báo dưới thanh HUD
-    const hudName = document.getElementById('devoteeNameLine');
-    const hudAct = document.getElementById('devoteeActionTag');
-    if (hudName) hudName.textContent = user || 'Thí Chủ';
-    if (hudAct) hudAct.textContent = actionLabel || 'Dâng hương';
-  }
-
-  // 6. Cập nhật toàn bộ giao diện theo State từ Server
-  let hasInitializedRealLeader = false;
-
-  function updateUIState(st) {
-    if (!st) return;
-
-    document.getElementById('statIncense').textContent = Number(st.totalIncense || 0).toLocaleString('vi-VN');
-    document.getElementById('statMerit').textContent = Number(st.totalMerit || 0).toLocaleString('vi-VN');
-    document.getElementById('statWoodenFish').textContent = Number(st.woodenFishHits || 0).toLocaleString('vi-VN');
-
-    renderIncenseSticks(st.activeIncenseSticks || 9);
-
-    const lb = Array.isArray(st.leaderboard) ? st.leaderboard : [];
-    renderVipCushions(lb);
-    renderCongregationHall(lb);
-
-    // Đồng bộ tên Chủ Lễ mặc định theo người dẫn đầu thực tế nếu chưa có sự kiện mới
-    if (!hasInitializedRealLeader && lb.length > 0) {
-      hasInitializedRealLeader = true;
-      const topDev = lb[0];
-      updateCentralWorshipper(
-        topDev.name,
-        topDev.avatar,
-        `✨ Công đức: ${Number(topDev.merit).toLocaleString('vi-VN')} CĐ`,
-        topDev.lastWish || 'Nam Mô A Di Đà Phật, cầu bình an cát tường',
-        false
-      );
-    }
-
-    // Cập nhật Bảng TẤM LÒNG THÀNH ở góc dưới phải (Top 4)
-    const lbList = document.getElementById('leaderboardList');
-    if (lbList) {
-      lbList.innerHTML = lb
-        .slice(0, 4)
-        .map(
-          (item) => `
-          <div class="leader-item">
-            <span class="leader-rank">${item.rank}</span>
-            <span class="leader-name">${escapeHtml(shortenName(item.name, 14))}</span>
-            <span class="leader-merit">${Number(item.merit).toLocaleString('vi-VN')}</span>
-          </div>
-        `
-        )
-        .join('');
-    }
-
-    // Trạng thái kết nối TikTok Live
-    const liveDot = document.getElementById('liveDot');
-    const liveText = document.getElementById('liveStatusText');
-    if (st.tiktok?.connected) {
-      liveDot.classList.add('connected');
-      liveText.textContent = `LIVE @${st.tiktok.username} • ${st.tiktok.viewerCount || 0} mắt`;
-    } else if (st.tiktok?.connecting) {
-      liveDot.classList.remove('connected');
-      liveText.textContent = `Đang kết nối @${st.tiktok.username}...`;
-    } else {
-      liveDot.classList.remove('connected');
-      liveText.textContent = st.settings?.autoSim
-        ? 'CHÙA LINH ỨNG • TỰ ĐỘNG GIẢ LẬP ĐÔNG NGƯỜI'
-        : 'CHÙA LINH ỨNG • ĐỨC PHẬT A DI ĐÀ';
-    }
-
-    const btnAutoSim = document.getElementById('btnToggleAutoSim');
-    if (btnAutoSim && st.settings) {
-      btnAutoSim.textContent = st.settings.autoSim
-        ? '🤖 Tự động Giả lập Người Xem: ĐANG BẬT'
-        : '🤖 Tự động Giả lập Người Xem: TẮT';
-      btnAutoSim.classList.toggle('active-toggle', Boolean(st.settings.autoSim));
-    }
-    if (st.settings) {
-      if (typeof st.settings.musicVolume === 'number') {
-        audio.setMusicVolume(st.settings.musicVolume);
-        const sMus = document.getElementById('sliderMusicVol');
-        const vMus = document.getElementById('valMusicVol');
-        const pct = Math.round(st.settings.musicVolume * 100);
-        if (sMus) sMus.value = String(pct);
-        if (vMus) vMus.textContent = `${pct}%`;
-      }
-      if (typeof st.settings.ttsVolume === 'number') {
-        audio.setTtsVolume(st.settings.ttsVolume);
-        const sTts = document.getElementById('sliderTtsVol');
-        const vTts = document.getElementById('valTtsVol');
-        const pct = Math.round(st.settings.ttsVolume * 100);
-        if (sTts) sTts.value = String(pct);
-        if (vTts) vTts.textContent = `${pct}%`;
-      }
-    }
-
-
-    const feed = document.getElementById('eventFeed');
-    if (feed && Array.isArray(st.recentEvents)) {
-      feed.innerHTML = st.recentEvents
-        .slice(0, 8)
-        .map((ev) => `<div class="event-feed-item">${formatEventSummary(ev)}</div>`)
-        .join('');
-    }
-  }
-
-  function formatEventSummary(ev) {
-    switch (ev.type) {
-      case 'burnIncense':
-        return `🔥 <strong>${escapeHtml(ev.user)}</strong> dâng ${ev.count} nén nhang (+${ev.merit} CĐ)`;
-      case 'strikeWoodenFish':
-        return `🪵 <strong>${escapeHtml(ev.user)}</strong> gõ mõ ${ev.count} nhịp (+${ev.merit} CĐ)`;
-      case 'ringBell':
-        return `🔔 <strong>${escapeHtml(ev.user)}</strong> thỉnh Đại Hồng Chung (+${ev.merit} CĐ)`;
-      case 'sendPrayer':
-        return `🏮 <strong>${escapeHtml(ev.user)}</strong> cầu phúc: “${escapeHtml(ev.wish)}”`;
-      case 'offerGift':
-      case 'grandCeremony':
-        return `🪷 <strong>${escapeHtml(ev.user)}</strong> dâng <em>${escapeHtml(ev.giftName)}</em> (+${ev.merit} CĐ)`;
-      case 'drawFortune':
-        return `🎋 <strong>${escapeHtml(ev.user)}</strong> gieo được Quẻ số ${ev.fortune?.number} (${ev.fortune?.rank})`;
-      default:
-        return `✨ <strong>${escapeHtml(ev.user || 'Thí chủ')}</strong> tương tác`;
-    }
-  }
-
-  // 7. Xử lý hiệu ứng khi có Nghi Thức mới
-  let fortuneTimer = null;
-  let grandTimer = null;
-
-  function triggerRitualVisuals(ev) {
-    if (!ev) return;
-
-    if (ev.ttsText && ev.type !== 'drawFortune') {
-      audio.enqueueTts(ev.ttsText, { voice: ev.ttsVoice || 'maichi' });
-    }
-
-    switch (ev.type) {
-      case 'burnIncense': {
-        audio.playIncenseChime();
-        particles.spawnIncenseBurst(540, 895);
-        particles.spawnFloatingMerit(`+${ev.merit} Công Đức`, 540, 860, '#ffe082');
-        animateWalkerOnCarpet(ev.user, ev.avatar, `🔥 Dâng ${ev.count} nén hương (+${ev.merit} CĐ)`, ev.wish);
-        break;
-      }
-
-      case 'strikeWoodenFish': {
-        audio.playWoodenFish();
-        pulseHallBowing();
-        particles.spawnFloatingMerit(`+${ev.merit} Công Đức`, 890, 935, '#ffd54f');
-        break;
-      }
-
-      case 'ringBell': {
-        audio.playTempleBell(1.0);
-        pulseHallBowing();
-        particles.spawnBellWave(540, 510, 4);
-        particles.spawnFloatingMerit(`+${ev.merit} Công Đức`, 190, 935, '#fff3b0');
-        updateCentralWorshipper(ev.user, ev.avatar, `🔔 Thỉnh Đại Hồng Chung (+${ev.merit} CĐ)`, ev.wish);
-        break;
-      }
-
-      case 'sendPrayer': {
-        audio.playIncenseChime();
-        spawnSkyLantern(ev.user, ev.wish);
-        particles.spawnFloatingMerit(`+${ev.merit} Công Đức`, 540, 920, '#ffb74d');
-        animateWalkerOnCarpet(ev.user, ev.avatar, `🏮 Cầu phúc (+${ev.merit} CĐ)`, ev.wish);
-        break;
-      }
-
-      case 'offerGift': {
-        audio.playIncenseChime();
-        audio.playTempleBell(0.85);
-        particles.spawnIncenseBurst(540, 895);
-        particles.spawnFloatingMerit(`+${ev.merit} Công Đức`, 540, 840, '#fff3b0');
-        animateWalkerOnCarpet(ev.user, ev.avatar, `🪷 Dâng ${ev.giftName} (+${ev.merit} CĐ)`, ev.wish);
-        break;
-      }
-
-      case 'grandCeremony': {
-        audio.playTempleBell(1.2);
-        setTimeout(() => audio.playTempleBell(1.1), 900);
-        particles.spawnGrandCeremonyRain();
-        pulseHallBowing();
-        showGrandCeremonyBanner(ev.user, ev.giftName, ev.merit);
-        animateWalkerOnCarpet(ev.user, ev.avatar, `🐉 ${ev.giftName} (+${ev.merit} CĐ)`, ev.wish);
-        break;
-      }
-
-      case 'drawFortune': {
-        audio.playFortuneShake();
-        updateCentralWorshipper(
-          ev.user,
-          ev.avatar,
-          `🎋 Đang xin xăm...`,
-          `Thí chủ ${ev.user} đang thành tâm xin quẻ...`,
-          false
-        );
-        // Chỉ hiển thị tờ Quẻ Xăm đúng thời điểm giọng đọc bắt đầu vang lên!
-        audio.enqueueTts(ev.ttsText || '', {
-          voice: ev.ttsVoice || 'maichi',
-          onStart: () => {
-            audio.playIncenseChime();
-            showFortuneModal(ev.user, ev.fortune);
-            updateCentralWorshipper(
-              ev.user,
-              ev.avatar,
-              `🎋 Quẻ số ${ev.fortune?.number} (${ev.fortune?.rank})`,
-              ev.fortune?.meaning || '',
-              true
-            );
-          },
-          onEnd: () => {
-            clearTimeout(fortuneTimer);
-            fortuneTimer = setTimeout(() => {
-              document.getElementById('fortuneModal')?.classList.remove('visible');
-            }, 1800);
-          }
-        });
-        break;
-      }
-    }
-  }
-
-  function spawnSkyLantern(user, wish) {
-    const layer = document.getElementById('skyLanternsLayer');
-    if (!layer) return;
-    const lantern = document.createElement('div');
-    lantern.className = 'sky-lantern';
-    const leftPos = 80 + Math.floor(Math.random() * 640);
-    lantern.style.left = `${leftPos}px`;
-    lantern.innerHTML = `
-      <div class="sky-lantern-user">🙏 ${escapeHtml(user)}</div>
-      <div class="sky-lantern-wish">“${escapeHtml(wish)}”</div>
-    `;
-    layer.appendChild(lantern);
-    setTimeout(() => {
-      lantern.remove();
-    }, 10600);
-  }
-
-  function showFortuneModal(user, fortune) {
-    if (!fortune) return;
-    const modal = document.getElementById('fortuneModal');
-    document.getElementById('fortuneRankBadge').textContent = fortune.rank.toUpperCase();
-    document.getElementById('fortuneTitle').textContent = `Quẻ Số ${fortune.number} — ${fortune.title}`;
-    document.getElementById('fortuneDevotee').textContent = `Thí chủ cầu quẻ: ${user}`;
-    document.getElementById('fortunePoem').textContent = fortune.poem;
-    document.getElementById('fortuneMeaning').textContent = `Lời bàn: ${fortune.meaning}`;
-
-    modal.classList.add('visible');
-    clearTimeout(fortuneTimer);
-    fortuneTimer = setTimeout(() => {
-      modal.classList.remove('visible');
-    }, 15000);
-  }
-
-  document.getElementById('fortuneModal')?.addEventListener('click', () => {
-    document.getElementById('fortuneModal').classList.remove('visible');
-  });
-
-  function showGrandCeremonyBanner(user, giftName, merit) {
-    const banner = document.getElementById('grandCeremonyBanner');
-    document.getElementById('grandTitle').textContent = `🐉 ${giftName.toUpperCase()} 🐉`;
-    document.getElementById('grandSub').textContent = `Đại Thí Chủ ${user} • Công Đức Vô Lượng (+${merit} CĐ)`;
-    banner.classList.add('visible');
-    clearTimeout(grandTimer);
-    grandTimer = setTimeout(() => {
-      banner.classList.remove('visible');
-    }, 6800);
-  }
-
-  // 8. Kết nối JSON-RPC 2.0 WebSocket & Gửi Lệnh RPC
+  // 5. Kết nối WebSocket (/ws)
   let ws = null;
-  let rpcId = 1;
+  let wsRetryTimer = null;
 
-  function connectWebSocket() {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${proto}//${window.location.host}/ws`);
+  function connectWs() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('[WebSocket] Đã kết nối tới server hồ câu!');
+      if (liveDot) liveDot.style.background = '#00e676';
+    };
+
+    ws.onclose = () => {
+      console.warn('[WebSocket] Mất kết nối, tự kết nối lại sau 2.5s...');
+      if (liveDot) liveDot.style.background = '#ff5252';
+      clearTimeout(wsRetryTimer);
+      wsRetryTimer = setTimeout(connectWs, 2500);
+    };
+
+    ws.onerror = (err) => {
+      console.warn('[WebSocket Error]', err);
+    };
 
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.method === 'temple.state') {
-          updateUIState(msg.params);
-        } else if (msg.method === 'temple.event') {
-          if (msg.params?.state) updateUIState(msg.params.state);
-          if (msg.params?.event) triggerRitualVisuals(msg.params.event);
-        } else if (msg.method === 'tts.play') {
-          if (msg.params?.url) {
-            audio.enqueueTts(msg.params.text || 'Nam mô A Di Đà Phật', {
-              voice: msg.params.voice || 'maichi',
-              url: msg.params.url
-            });
-          }
-        }
+        handleWsMessage(msg);
       } catch (_) {}
     };
-
-    ws.onclose = () => {
-      setTimeout(connectWebSocket, 2000);
-    };
   }
-  connectWebSocket();
 
+  function handleWsMessage(msg) {
+    if (!msg) return;
+
+    // Trạng thái hồ câu
+    if (msg.method === 'fishing.state' || msg.method === 'temple.state') {
+      updatePublicState(msg.params);
+    }
+    // Sự kiện tương tác thời gian thực
+    else if (msg.method === 'fishing.event' || msg.method === 'temple.event') {
+      const eventData = msg.params?.event;
+      if (eventData) {
+        handleFishingEvent(eventData);
+      }
+      if (msg.params?.state) {
+        updatePublicState(msg.params.state);
+      }
+    }
+    // Số người xem live
+    else if (msg.method === 'fishing.viewerCount' || msg.method === 'temple.viewerCount') {
+      const count = msg.params?.viewerCount || 0;
+      if (liveStatusText) {
+        liveStatusText.textContent = `HỒ CÂU CÁ • ${count} NGƯỜI XEM`;
+      }
+    }
+  }
+
+  // 6. Cập nhật giao diện hồ câu từ trạng thái
+  function updatePublicState(st) {
+    if (!st) return;
+
+    if (statCatches) statCatches.textContent = st.totalCatches ?? 0;
+    if (statWeight) statWeight.textContent = st.totalWeightKg ?? '0.0';
+    if (statBait) statBait.textContent = st.totalBait ?? 0;
+    if (statHorn) statHorn.textContent = st.hornsBlown ?? 0;
+
+    // Cập nhật bảng xếp hạng VUA SÁT CÁ
+    if (leaderboardList && Array.isArray(st.leaderboard)) {
+      renderLeaderboard(st.leaderboard);
+      renderVipStools(st.leaderboard);
+    }
+
+    // Cập nhật trạng thái TikTok
+    if (st.tiktok && liveStatusText) {
+      if (st.tiktok.connected) {
+        liveStatusText.textContent = `@${st.tiktok.username} • ${st.tiktok.viewerCount || 0} NGƯỜI XEM`;
+        if (liveDot) liveDot.style.background = '#00e676';
+      } else if (st.tiktok.connecting) {
+        liveStatusText.textContent = `ĐANG KẾT NỐI @${st.tiktok.username}...`;
+        if (liveDot) liveDot.style.background = '#ffea00';
+      } else {
+        liveStatusText.textContent = 'HỒ CÂU CÁ GIẢI TRÍ • TRỰC TIẾP';
+        if (liveDot) liveDot.style.background = '#00e676';
+      }
+    }
+  }
+
+  function renderLeaderboard(board) {
+    leaderboardList.innerHTML = '';
+    board.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'lb-row';
+      const medal = item.rank === 1 ? '🥇' : item.rank === 2 ? '🥈' : item.rank === 3 ? '🥉' : `${item.rank}.`;
+      row.innerHTML = `
+        <div class="lb-left">
+          <span class="lb-rank">${medal}</span>
+          <span class="lb-name" title="${item.name}">${item.name}</span>
+        </div>
+        <div class="lb-weight">${item.totalWeightKg}kg</div>
+      `;
+      leaderboardList.appendChild(row);
+    });
+  }
+
+  function renderVipStools(board) {
+    if (!vipStoolsLayer) return;
+    vipStoolsLayer.innerHTML = '';
+    board.slice(0, 6).forEach((item) => {
+      const card = document.createElement('div');
+      card.className = 'vip-stool-card';
+      const avatarContent = item.avatar
+        ? `<img src="${item.avatar}" class="stool-avatar" alt="" />`
+        : `<div class="stool-avatar">🎣</div>`;
+
+      card.innerHTML = `
+        <div class="stool-rank-tag">TOP ${item.rank}</div>
+        ${avatarContent}
+        <div class="stool-name" title="${item.name}">${item.name}</div>
+        <div class="stool-weight">${item.totalWeightKg}kg</div>
+      `;
+      vipStoolsLayer.appendChild(card);
+    });
+  }
+
+  // 7. Xử lý hoạt ảnh sự kiện tương tác
+  let catchModalTimer = null;
+  let bannerTimer = null;
+
+  function handleFishingEvent(ev) {
+    appendEventFeed(ev);
+
+    // Kích hoạt âm thanh & giọng đọc
+    const audio = window.FishingAudio;
+
+    switch (ev.type) {
+      // 1. Thả thính / Ném mồi
+      case 'castBait':
+        if (audio) audio.playWaterDrop();
+        if (particleEngine) particleEngine.addBaitDrop(540, 1150, ev.count || 1);
+        if (activeAnglerName) activeAnglerName.textContent = ev.user;
+        if (activeActionTag) activeActionTag.textContent = `Thả ${ev.count || 1} nắm thính thơm`;
+        break;
+
+      // 2. Quăng cần
+      case 'castRod':
+        if (audio) {
+          audio.playRodWhoosh();
+          audio.playWaterDrop(1.2);
+        }
+        if (particleEngine) particleEngine.addBaitDrop(540, 1150, 2);
+        if (anglerWishBubble) anglerWishBubble.textContent = `“${ev.wish || 'Quăng cần thả phao!'}”`;
+        if (anglerName) anglerName.textContent = ev.user;
+        if (anglerAction) anglerAction.textContent = '✨ Quăng cần thả phao';
+        if (activeAnglerName) activeAnglerName.textContent = ev.user;
+        if (activeActionTag) activeActionTag.textContent = 'Vừa vung cần thả phao';
+
+        if (ev.ttsText && audio) {
+          audio.enqueueTts(ev.ttsText);
+        }
+        break;
+
+      // 3. Giật cần lên cá (Hook Fish)
+      case 'hookFish':
+      case 'catchBigFish':
+      case 'catchLeviathan':
+        const isLeviathan = ev.type === 'catchLeviathan';
+        const isBig = ev.type === 'catchBigFish' || isLeviathan;
+
+        // Rung lắc phao câu
+        if (bobberBody) {
+          bobberBody.classList.add('hooked');
+          setTimeout(() => bobberBody.classList.remove('hooked'), 3200);
+        }
+
+        // Cần thủ giật cần
+        if (anglerSpriteImg) {
+          anglerSpriteImg.classList.add('reeling');
+          setTimeout(() => anglerSpriteImg.classList.remove('reeling'), 3000);
+        }
+
+        // Âm thanh
+        if (audio) {
+          audio.playReelClick(12, 35);
+          setTimeout(() => audio.playFishSplash(), 350);
+          if (isBig) {
+            setTimeout(() => audio.playCelebrationChime(), 800);
+          }
+        }
+
+        // Hiệu ứng hạt nước
+        if (particleEngine) {
+          particleEngine.addFishCatch(540, 1150, isBig);
+        }
+
+        // Cập nhật thông tin cần thủ
+        if (anglerWishBubble && ev.wish) {
+          anglerWishBubble.textContent = `“${ev.wish}”`;
+        }
+        if (anglerName) anglerName.textContent = ev.user;
+        if (anglerAction) {
+          anglerAction.textContent = `🐟 Bắt được ${ev.fish?.name || 'Cá'} (${ev.weightKg}kg)`;
+        }
+
+        if (activeAnglerName) activeAnglerName.textContent = ev.user;
+        if (activeActionTag) {
+          activeActionTag.textContent = `Vừa giật được ${ev.fish?.name || 'Cá to'} ${ev.weightKg}kg`;
+        }
+
+        // Mở Modal Chiến Tích Bắt Cá đồng bộ Giọng Đọc
+        if (ev.fish && catchModal) {
+          catchBadge.textContent = ev.fish.rarity || 'PHỔ THÔNG';
+          catchBadge.style.background = ev.fish.badgeColor || '#fbc02d';
+          catchIcon.textContent = ev.fish.icon || '🐟';
+          catchFishName.textContent = ev.fish.name || 'Cá Nước Ngọt';
+          catchWeight.textContent = `${ev.weightKg} kg`;
+          catchAnglerName.textContent = `Cần Thủ: ${ev.user}`;
+          catchQuote.textContent = `“${ev.fish.quote || ''}”`;
+
+          catchModal.classList.add('active');
+          clearTimeout(catchModalTimer);
+          catchModalTimer = setTimeout(() => {
+            catchModal.classList.remove('active');
+          }, 6500);
+        }
+
+        // Banner Thủy Quái
+        if (isLeviathan && leviathanBanner) {
+          leviathanTitle.textContent = `🐉 ${ev.fish?.name?.toUpperCase() || 'THỦY QUÁI XUẤT THẾ'} 🐉`;
+          leviathanSub.textContent = `Đại cần thủ ${ev.user} bắt được thủy quái nặng ${ev.weightKg}kg!`;
+          leviathanBanner.classList.add('active');
+          clearTimeout(bannerTimer);
+          bannerTimer = setTimeout(() => {
+            leviathanBanner.classList.remove('active');
+          }, 7000);
+        }
+
+        // Phát giọng đọc ZeroTTS
+        if (ev.ttsText && audio) {
+          audio.enqueueTts(ev.ttsText, {
+            onStart: () => {
+              if (catchModal && !catchModal.classList.contains('active')) {
+                catchModal.classList.add('active');
+              }
+            },
+            onEnd: () => {
+              if (catchModal) catchModal.classList.remove('active');
+            }
+          });
+        }
+        break;
+
+      // 4. Thổi còi báo cá
+      case 'soundHorn':
+        if (audio) audio.playAirHorn();
+        if (particleEngine) particleEngine.addFishCatch(540, 1150, false);
+        if (activeAnglerName) activeAnglerName.textContent = ev.user;
+        if (activeActionTag) activeActionTag.textContent = 'Thổi còi báo cá vang rền bến hồ';
+        if (ev.ttsText && audio) {
+          audio.enqueueTts(ev.ttsText);
+        }
+        break;
+    }
+  }
+
+  function appendEventFeed(ev) {
+    if (!eventFeed) return;
+    const item = document.createElement('div');
+    item.className = 'feed-item';
+    const timeStr = new Date().toLocaleTimeString('vi-VN');
+    item.innerHTML = `<strong>[${timeStr}] ${ev.user}</strong>: ${ev.type === 'hookFish' ? `Giật được ${ev.fish?.name} (${ev.weightKg}kg)` : ev.type === 'castBait' ? `Thả ${ev.count} mồi thính` : ev.type === 'soundHorn' ? 'Thổi còi báo cá' : 'Quăng cần thả phao'}`;
+    eventFeed.prepend(item);
+    if (eventFeed.children.length > 25) {
+      eventFeed.removeChild(eventFeed.lastChild);
+    }
+  }
+
+  // 8. Đăng ký các nút bấm tương tác trực tiếp
   async function callRpc(method, params = {}) {
-    audio.ensureContext();
-    const payload = {
-      jsonrpc: '2.0',
-      id: rpcId++,
-      method,
-      params
+    try {
+      const res = await fetch('/rpc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method,
+          params
+        })
+      });
+      return await res.json();
+    } catch (e) {
+      console.warn('[RPC Error]', e.message);
+      return null;
+    }
+  }
+
+  function getAnglerInputs() {
+    const nameInput = document.getElementById('inputAnglerName');
+    const wishInput = document.getElementById('inputAnglerWish');
+    return {
+      user: nameInput?.value?.trim() || 'Hải Đăng Cần Thủ',
+      wish: wishInput?.value?.trim() || 'Săn cá chép vàng 5 ký!'
     };
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(payload));
-      return;
-    }
-    const res = await fetch('/rpc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (data?.result?.state) updateUIState(data.result.state);
-    if (data?.result?.event) triggerRitualVisuals(data.result.event);
-    return data;
   }
 
-  function getFormInput() {
-    const user = document.getElementById('inputDevoteeName')?.value.trim() || 'Quỳnh_Finn';
-    const wish =
-      document.getElementById('inputDevoteeWish')?.value.trim() ||
-      'Cầu cho gia đình bình an, tài lộc hanh thông';
-    return { user, wish };
+  // Hotspots trên màn hình hồ câu
+  const spotBait = document.getElementById('spotBait');
+  const spotCast = document.getElementById('spotCast');
+  const spotHorn = document.getElementById('spotHorn');
+  const fishingBobberZone = document.getElementById('fishingBobberZone');
+
+  if (spotBait) {
+    spotBait.addEventListener('click', () => {
+      window.FishingAudio?.ensureContext();
+      const { user } = getAnglerInputs();
+      callRpc('fishing.castBait', { user, count: 5 });
+    });
   }
 
-  // Gắn sự kiện tương tác trực tiếp trên màn hình 9:16 & Thanh HUD dưới đáy
-  document.getElementById('incenseBurnerZone')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.burnIncense', { user, count: 3, wish });
-  });
-
-  document.getElementById('cardIncense')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.burnIncense', { user, count: 3, wish });
-  });
-
-  document.getElementById('cardBlessing')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.sendPrayer', { user, wish });
-  });
-
-  document.getElementById('cardLotus')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.offerGift', {
-      user,
-      giftType: 'lotus',
-      coins: 20,
-      giftName: 'Đài Hoa Sen Vàng',
-      wish
+  if (spotCast) {
+    spotCast.addEventListener('click', () => {
+      window.FishingAudio?.ensureContext();
+      const { user, wish } = getAnglerInputs();
+      callRpc('fishing.castRod', { user, wish });
     });
-  });
+  }
 
-  document.getElementById('woodenFishStation')?.addEventListener('click', () => {
-    const { user } = getFormInput();
-    callRpc('temple.strikeWoodenFish', { user, count: 1 });
-  });
-
-  document.getElementById('bellStation')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.ringBell', { user, count: 1, wish, readTts: true });
-  });
-
-  document.getElementById('fortuneCylinder')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.drawFortune', { user, topic: wish });
-  });
-
-  // Các nút trên Quick RPC Dock bên phải
-  document.getElementById('btnRpcIncense')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.burnIncense', { user, count: 3, wish });
-  });
-
-  document.getElementById('btnRpcLantern')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.sendPrayer', { user, wish });
-  });
-
-  document.getElementById('btnRpcWoodenFish')?.addEventListener('click', () => {
-    const { user } = getFormInput();
-    callRpc('temple.strikeWoodenFish', { user, count: 5 });
-  });
-
-  document.getElementById('btnRpcBell')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.ringBell', { user, count: 1, wish, readTts: true });
-  });
-
-  document.getElementById('btnRpcFortune')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.drawFortune', { user, topic: wish });
-  });
-
-  document.getElementById('btnRpcGiftLotus')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.offerGift', {
-      user,
-      giftType: 'lotus',
-      coins: 20,
-      giftName: 'Đài Hoa Sen Vàng',
-      wish
+  if (spotHorn) {
+    spotHorn.addEventListener('click', () => {
+      window.FishingAudio?.ensureContext();
+      const { user } = getAnglerInputs();
+      callRpc('fishing.soundHorn', { user });
     });
-  });
+  }
 
-  document.getElementById('btnRpcGrandCeremony')?.addEventListener('click', () => {
-    const { user, wish } = getFormInput();
-    callRpc('temple.grandCeremony', {
-      user,
-      coins: 299,
-      giftName: 'Đại Lễ Kim Long Chầu Phật',
-      wish
+  if (fishingBobberZone) {
+    fishingBobberZone.addEventListener('click', () => {
+      window.FishingAudio?.ensureContext();
+      const { user, wish } = getAnglerInputs();
+      callRpc('fishing.hookFish', { user, wish });
     });
+  }
+
+  // Thẻ quà HUD đáy
+  document.getElementById('cardBait')?.addEventListener('click', () => {
+    window.FishingAudio?.ensureContext();
+    const { user } = getAnglerInputs();
+    callRpc('fishing.castBait', { user, count: 5 });
   });
 
-  document.getElementById('btnConnectTikTok')?.addEventListener('click', () => {
-    const username = document.getElementById('inputTikTokUser')?.value.trim();
-    if (!username) return;
-    callRpc('live.connect', { username });
+  document.getElementById('cardCast')?.addEventListener('click', () => {
+    window.FishingAudio?.ensureContext();
+    const { user, wish } = getAnglerInputs();
+    callRpc('fishing.castRod', { user, wish });
   });
 
-  let autoSimState = false;
-  document.getElementById('btnToggleAutoSim')?.addEventListener('click', () => {
-    autoSimState = !autoSimState;
-    callRpc('live.setAutoSim', { enabled: autoSimState });
+  document.getElementById('cardGourmet')?.addEventListener('click', () => {
+    window.FishingAudio?.ensureContext();
+    const { user } = getAnglerInputs();
+    callRpc('fishing.catchBigFish', { user, coins: 20 });
   });
 
-  document.getElementById('btnToggleTts')?.addEventListener('click', (e) => {
-    audio.ttsEnabled = !audio.ttsEnabled;
-    const btn = e.currentTarget;
-    btn.textContent = `🎙️ Giọng Đọc: ${audio.ttsEnabled ? 'BẬT' : 'TẮT'}`;
-    btn.classList.toggle('active-toggle', audio.ttsEnabled);
+  // Nút Quick Dock
+  document.getElementById('btnRpcHook')?.addEventListener('click', () => {
+    window.FishingAudio?.ensureContext();
+    const { user, wish } = getAnglerInputs();
+    callRpc('fishing.hookFish', { user, wish });
   });
 
-  document.getElementById('btnToggleMusic')?.addEventListener('click', (e) => {
-    audio.bgMusicEnabled = !audio.bgMusicEnabled;
-    if (audio.bgMusicEnabled) {
-      audio.startZenAmbience();
-    } else {
-      audio.stopZenAmbience();
-    }
-    const btn = e.currentTarget;
-    btn.textContent = `🎵 Nhạc Nền: ${audio.bgMusicEnabled ? 'BẬT' : 'TẮT'}`;
-    btn.classList.toggle('active-toggle', audio.bgMusicEnabled);
+  document.getElementById('btnRpcCast')?.addEventListener('click', () => {
+    window.FishingAudio?.ensureContext();
+    const { user, wish } = getAnglerInputs();
+    callRpc('fishing.castRod', { user, wish });
   });
 
-  // Khởi tạo và gắn sự kiện thanh trượt chỉnh âm lượng Nhạc nền & Giọng đọc
+  document.getElementById('btnRpcBait')?.addEventListener('click', () => {
+    window.FishingAudio?.ensureContext();
+    const { user } = getAnglerInputs();
+    callRpc('fishing.castBait', { user, count: 5 });
+  });
+
+  document.getElementById('btnRpcHorn')?.addEventListener('click', () => {
+    window.FishingAudio?.ensureContext();
+    const { user } = getAnglerInputs();
+    callRpc('fishing.soundHorn', { user });
+  });
+
+  document.getElementById('btnRpcBigFish')?.addEventListener('click', () => {
+    window.FishingAudio?.ensureContext();
+    const { user } = getAnglerInputs();
+    callRpc('fishing.catchBigFish', { user, coins: 35 });
+  });
+
+  document.getElementById('btnRpcLeviathan')?.addEventListener('click', () => {
+    window.FishingAudio?.ensureContext();
+    const { user } = getAnglerInputs();
+    callRpc('fishing.catchLeviathan', { user, coins: 199 });
+  });
+
+  // Điều khiển âm thanh
+  const btnUnlockAudio = document.getElementById('btnUnlockAudio');
+  if (btnUnlockAudio) {
+    btnUnlockAudio.addEventListener('click', () => {
+      window.FishingAudio?.ensureContext();
+      btnUnlockAudio.textContent = '✅ Đã Bật Âm Thanh & Giọng Đọc';
+      btnUnlockAudio.classList.remove('gold');
+    });
+  }
+
+  const btnToggleMusic = document.getElementById('btnToggleMusic');
+  if (btnToggleMusic) {
+    btnToggleMusic.addEventListener('click', () => {
+      const audio = window.FishingAudio;
+      if (!audio) return;
+      audio.ensureContext();
+      audio.bgMusicEnabled = !audio.bgMusicEnabled;
+      if (audio.bgMusicEnabled) {
+        audio.startLakeAmbience();
+        btnToggleMusic.textContent = '🎵 Âm Hồ Nước: BẬT';
+        btnToggleMusic.classList.add('active-toggle');
+      } else {
+        audio.stopLakeAmbience();
+        btnToggleMusic.textContent = '🎵 Âm Hồ Nước: TẮT';
+        btnToggleMusic.classList.remove('active-toggle');
+      }
+    });
+  }
+
+  const btnToggleTts = document.getElementById('btnToggleTts');
+  if (btnToggleTts) {
+    btnToggleTts.addEventListener('click', () => {
+      const audio = window.FishingAudio;
+      if (!audio) return;
+      audio.ttsEnabled = !audio.ttsEnabled;
+      btnToggleTts.textContent = audio.ttsEnabled ? '🎙️ Giọng Đọc: BẬT' : '🎙️ Giọng Đọc: TẮT';
+      btnToggleTts.classList.toggle('active-toggle', audio.ttsEnabled);
+    });
+  }
+
   const sliderMusicVol = document.getElementById('sliderMusicVol');
   const valMusicVol = document.getElementById('valMusicVol');
-  if (sliderMusicVol && valMusicVol) {
-    const initMusPct = Math.round(audio.bgBaseVolume * 100);
-    sliderMusicVol.value = String(initMusPct);
-    valMusicVol.textContent = `${initMusPct}%`;
+  if (sliderMusicVol) {
     sliderMusicVol.addEventListener('input', (e) => {
-      const pct = Number(e.target.value);
-      valMusicVol.textContent = `${pct}%`;
-      audio.ensureContext();
-      audio.setMusicVolume(pct / 100);
-    });
-    sliderMusicVol.addEventListener('change', (e) => {
-      const pct = Number(e.target.value);
-      callRpc('temple.updateSettings', { musicVolume: +(pct / 100).toFixed(2) });
+      const val = e.target.value;
+      if (valMusicVol) valMusicVol.textContent = `${val}%`;
+      window.FishingAudio?.setMusicVolume(val / 100);
     });
   }
 
   const sliderTtsVol = document.getElementById('sliderTtsVol');
   const valTtsVol = document.getElementById('valTtsVol');
-  if (sliderTtsVol && valTtsVol) {
-    const initTtsPct = Math.round(audio.ttsVolume * 100);
-    sliderTtsVol.value = String(initTtsPct);
-    valTtsVol.textContent = `${initTtsPct}%`;
+  if (sliderTtsVol) {
     sliderTtsVol.addEventListener('input', (e) => {
-      const pct = Number(e.target.value);
-      valTtsVol.textContent = `${pct}%`;
-      audio.setTtsVolume(pct / 100);
-    });
-    sliderTtsVol.addEventListener('change', (e) => {
-      const pct = Number(e.target.value);
-      callRpc('temple.updateSettings', { ttsVolume: +(pct / 100).toFixed(2) });
+      const val = e.target.value;
+      if (valTtsVol) valTtsVol.textContent = `${val}%`;
+      window.FishingAudio?.setTtsVolume(val / 100);
     });
   }
 
-  function shortenName(name, maxLen = 13) {
-    const str = String(name || '');
-    return str.length > maxLen ? str.slice(0, maxLen - 1) + '…' : str;
+  // Kết nối TikTok Live
+  const btnConnectTikTok = document.getElementById('btnConnectTikTok');
+  const inputTikTokUser = document.getElementById('inputTikTokUser');
+  if (btnConnectTikTok) {
+    btnConnectTikTok.addEventListener('click', async () => {
+      const username = inputTikTokUser?.value?.trim();
+      if (!username) return alert('Vui lòng nhập @username hoặc link TikTok Live');
+      btnConnectTikTok.textContent = 'Đang kết nối...';
+      btnConnectTikTok.disabled = true;
+      try {
+        await callRpc('fishing.connectTikTok', { username });
+      } finally {
+        btnConnectTikTok.textContent = 'Kết Nối';
+        btnConnectTikTok.disabled = false;
+      }
+    });
   }
 
-  function escapeHtml(str) {
-    return String(str || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  // Tự động giả lập cần thủ
+  let autoSimState = false;
+  const btnToggleAutoSim = document.getElementById('btnToggleAutoSim');
+  if (btnToggleAutoSim) {
+    btnToggleAutoSim.addEventListener('click', async () => {
+      autoSimState = !autoSimState;
+      if (autoSimState) {
+        await callRpc('fishing.startAutoSim');
+        btnToggleAutoSim.textContent = '🤖 Tự động Giả lập: BẬT';
+        btnToggleAutoSim.classList.add('gold');
+      } else {
+        await callRpc('fishing.stopAutoSim');
+        btnToggleAutoSim.textContent = '🤖 Tự động Giả lập: TẮT';
+        btnToggleAutoSim.classList.remove('gold');
+      }
+    });
   }
+
+  // Bấm đóng modal chiến tích khi click ra ngoài
+  if (catchModal) {
+    catchModal.addEventListener('click', (e) => {
+      if (e.target === catchModal) {
+        catchModal.classList.remove('active');
+      }
+    });
+  }
+
+  // Khởi động kết nối
+  connectWs();
 })();

@@ -1,7 +1,7 @@
 {
   "name": "tiktok-live-temple-rpc",
   "version": "1.0.0",
-  "description": "TikTok Live RPC Interactive Buddhist Temple (Bun.js + ZeroTTS giọng Mai Chi)",
+  "description": "TikTok Live RPC Interactive Fishing Sanctuary - Hồ Câu Cá Giải Trí (Bun.js + ZeroTTS giọng Mai Chi)",
   "main": "server.js",
   "scripts": {
     "start": "bun run server.js",
