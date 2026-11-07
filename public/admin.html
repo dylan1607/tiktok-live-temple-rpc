@@ -226,15 +226,29 @@
           <input type="text" id="inputUser" class="input" value="Hải_Đăng_Cần_Thủ" placeholder="Tên cần thủ..." />
         </div>
         <div class="row">
+          <input type="text" id="inputAvatar" class="input" value="https://api.dicebear.com/7.x/bottts/svg?seed=haidang" placeholder="URL Avatar (để trống sẽ tự sinh avatar bot)..." />
+        </div>
+        <div class="row">
           <input type="text" id="inputWish" class="input" value="Săn chú cá chép vàng 5 ký đại cát đại lợi!" placeholder="Lời chúc / mong ước..." />
         </div>
         <div class="row" style="flex-wrap: wrap;">
-          <button class="btn gold" id="btnHook">🐟 Giật Cần Lên Cá</button>
-          <button class="btn" id="btnCast">🎣 Quăng Cần Thả Phao</button>
+          <button class="btn gold" id="btnCast">🎣 Quăng Cần (Đợi 1 Phút)</button>
+          <button class="btn" id="btnHook">⚡ Giật Cần Ngay (Force)</button>
           <button class="btn" id="btnBait">🪱 Thả Thính (+5)</button>
           <button class="btn" id="btnHorn">📯 Thổi Còi Báo Cá</button>
-          <button class="btn" id="btnBigFish">🦐 Mồi Thượng Hạng</button>
-          <button class="btn gold" id="btnLeviathan">🐉 Săn Thủy Quái (Quà Lớn)</button>
+        </div>
+
+        <h3 style="font-size: 15px; color: var(--gold-light); margin-top: 14px; margin-bottom: 8px;">🎁 Thử Nghiệm 9 Quà Tặng TikTok Live Chuẩn (Donate Bắt Cá Random Ngay Lập Tức):</h3>
+        <div class="row" style="flex-wrap: wrap; gap: 8px;">
+          <button class="btn" data-admin-gift="hoa_hong">🌹 Hoa hồng (1 xu)</button>
+          <button class="btn" data-admin-gift="dinh">🐱 Đỉnh (1 xu)</button>
+          <button class="btn" data-admin-gift="gg">🎮 GG (1 xu)</button>
+          <button class="btn gold" data-admin-gift="tay_cam">🕹️ Tay cầm chơi game (100 xu)</button>
+          <button class="btn" data-admin-gift="yeu_ban">🥰 Yêu bạn (1 xu)</button>
+          <button class="btn" data-admin-gift="chu_heo">🐷 Chú heo may mắn (10 xu)</button>
+          <button class="btn" data-admin-gift="tiktok">🎵 TikTok (1 xu)</button>
+          <button class="btn" data-admin-gift="ban_tim">🫰 Bắn tim (5 xu)</button>
+          <button class="btn" data-admin-gift="hieu_y">😉 Hiểu ý tôi chứ (1 xu)</button>
         </div>
       </div>
 
@@ -249,6 +263,11 @@
         <div class="row">
           <button class="btn" id="btnToggleSim" style="flex: 1;">🤖 Bật Tự Động Giả Lập Cần Thủ</button>
           <button class="btn danger" id="btnReset">🔄 Đặt Lại Số Liệu</button>
+        </div>
+        <div class="row" style="align-items: center; margin-top: 6px;">
+          <label style="font-size: 13px; color: var(--gold-light); font-weight: 700; white-space: nowrap;">⏱️ Thời gian câu miễn phí:</label>
+          <input type="number" id="inputFreeDuration" class="input" value="60" min="5" max="300" style="max-width: 90px;" />
+          <button class="btn" id="btnSaveDuration">Lưu Cài Đặt</button>
         </div>
         <div id="tiktokStatus" style="font-size: 13px; color: var(--muted); margin-top: 4px;">
           Trạng thái TikTok: Chưa kết nối
@@ -323,6 +342,13 @@
             : `⚪ Chưa kết nối (${st.tiktok.lastError || 'Sẵn sàng'})`;
         }
 
+        if (st.settings?.freeFishingDurationSec) {
+          const inputDur = document.getElementById('inputFreeDuration');
+          if (inputDur && document.activeElement !== inputDur) {
+            inputDur.value = st.settings.freeFishingDurationSec;
+          }
+        }
+
         const tbody = document.getElementById('leaderboardTbody');
         if (Array.isArray(st.leaderboard) && st.leaderboard.length) {
           tbody.innerHTML = '';
@@ -353,37 +379,62 @@
     function getUserInputs() {
       return {
         user: document.getElementById('inputUser').value.trim() || 'Hải Đăng',
+        avatar: document.getElementById('inputAvatar').value.trim() || '',
         wish: document.getElementById('inputWish').value.trim() || 'Săn cá chép vàng!'
       };
     }
 
+    document.querySelectorAll('[data-admin-gift]').forEach(btn => {
+      btn.onclick = async () => {
+        const giftId = btn.getAttribute('data-admin-gift');
+        const { user, avatar } = getUserInputs();
+        const res = await rpc('fishing.sendGift', { user, avatar, giftId });
+        if (res?.result?.event) {
+          const ev = res.result.event;
+          log(`🎁 <strong>${ev.user}</strong> tặng <strong>${ev.giftName}</strong> ${ev.giftIcon} (${ev.coins} xu), giật được <strong>${ev.fish?.name}</strong> (${ev.weightKg}kg)!`);
+        }
+        refreshState();
+      };
+    });
+
     document.getElementById('btnHook').onclick = async () => {
-      const { user, wish } = getUserInputs();
-      const res = await rpc('fishing.hookFish', { user, wish });
+      const { user, avatar, wish } = getUserInputs();
+      const res = await rpc('fishing.hookFish', { user, avatar, wish, force: true });
       if (res?.result?.event) {
         const ev = res.result.event;
-        log(`🐟 <strong>${ev.user}</strong> giật được <strong>${ev.fish?.name}</strong> nặng ${ev.weightKg}kg!`);
+        log(`⚡ <strong>${ev.user}</strong> giật cần thành công (Force Hook), bắt được <strong>${ev.fish?.name}</strong> (${ev.weightKg}kg)!`);
       }
       refreshState();
     };
 
     document.getElementById('btnCast').onclick = async () => {
-      const { user, wish } = getUserInputs();
-      await rpc('fishing.castRod', { user, wish });
-      log(`🎣 <strong>${user}</strong> quăng cần thả phao.`);
+      const { user, avatar, wish } = getUserInputs();
+      const res = await rpc('fishing.castRod', { user, avatar, wish });
+      if (res?.result?.waiting) {
+        log(`⏳ <strong>${user}</strong> đang câu cá, còn <strong>${res.result.remainingSec}s</strong> nữa cá mới cắn!`);
+      } else {
+        log(`🎣 <strong>${user}</strong> buông cần thả phao giữa hồ! Bắt đầu đếm 1 phút (60s) cá cắn câu...`);
+      }
+      refreshState();
+    };
+
+    document.getElementById('btnSaveDuration').onclick = async () => {
+      const sec = Number(document.getElementById('inputFreeDuration').value) || 60;
+      await rpc('fishing.updateSettings', { freeFishingDurationSec: sec });
+      log(`⚙️ Đã lưu thời gian câu cá miễn phí mặc định: <strong>${sec} giây</strong> (người xem không donate phải chờ ${sec}s mới cắn câu).`);
       refreshState();
     };
 
     document.getElementById('btnBait').onclick = async () => {
-      const { user } = getUserInputs();
-      await rpc('fishing.castBait', { user, count: 5 });
+      const { user, avatar } = getUserInputs();
+      await rpc('fishing.castBait', { user, avatar, count: 5 });
       log(`🪱 <strong>${user}</strong> thả 5 mồi thính thơm.`);
       refreshState();
     };
 
     document.getElementById('btnHorn').onclick = async () => {
-      const { user, wish } = getUserInputs();
-      await rpc('fishing.soundHorn', { user, wish });
+      const { user, avatar, wish } = getUserInputs();
+      await rpc('fishing.soundHorn', { user, avatar, wish });
       log(`📯 <strong>${user}</strong> thổi còi báo cá vang rền bến hồ!`);
       refreshState();
     };

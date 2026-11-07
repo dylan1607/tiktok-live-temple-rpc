@@ -38,24 +38,40 @@
           </div>
         </header>
 
-        <!-- 3. PHAO CÂU NHẤP NHÔ GIỮA HỒ -->
-        <div class="fishing-bobber-zone" id="fishingBobberZone" title="Bấm để Giật Cần Lên Cá">
-          <div class="bobber-body" id="bobberBody">
-            <div class="bobber-tip"></div>
-            <div class="bobber-float"></div>
+        <!-- 2.1. MỤC TIÊU CỘNG ĐỒNG: BÃO CÁ HỒ SÂU (FISH FRENZY GOAL) -->
+        <div class="community-goal-bar" id="communityGoalBar">
+          <div class="cg-info-row">
+            <div class="cg-title" id="cgTitle">🌊 MỤC TIÊU BÃO CÁ CỘNG ĐỒNG</div>
+            <div class="cg-progress-text"><span id="cgCurrent">185</span> / <span id="cgTarget">500</span> ĐIỂM</div>
           </div>
-          <div class="bobber-ripples">
-            <div class="bobber-ripple-ring"></div>
-            <div class="bobber-ripple-ring"></div>
+          <div class="cg-track">
+            <div class="cg-fill" id="cgFill" style="width: 37%;"></div>
           </div>
         </div>
 
-        <!-- DÂY CƯỚC CÂU TỪ CẦN CÂU ĐẾN PHAO (SVG) -->
-        <svg class="fishing-line-svg">
-          <path id="fishingLinePath" class="fishing-line-path" d="M 820 1480 Q 680 1300 540 1150" />
-        </svg>
+        <!-- 2.2. POPUP THÔNG BÁO DONATE QUÀ TẶNG NỔI BẬT -->
+        <div class="gift-alert-toast" id="giftAlertToast">
+          <div class="gift-alert-avatar-wrap">
+            <img class="gift-alert-avatar" id="giftAlertAvatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=vip" alt="" />
+            <span class="gift-alert-crown">👑</span>
+          </div>
+          <div class="gift-alert-info">
+            <div class="gift-alert-sender" id="giftAlertSender">Cần Thủ VIP</div>
+            <div class="gift-alert-action" id="giftAlertAction">Vừa gửi tặng <strong>Hoa hồng</strong> 🌹</div>
+          </div>
+          <div class="gift-alert-badge" id="giftAlertBadge">1 🪙</div>
+        </div>
 
-        <!-- 4. ĐIỂM TƯƠNG TÁC HAI BÊN HỒ CÂU -->
+        <!-- 3. HỆ THỐNG DÂY CƯỚC CÂU NỐI TỪ CẦN THỦ RA PHAO CÂU (SVG DYNAMIC CURVED LINES) -->
+        <svg class="lake-fishing-lines-svg" id="lakeFishingLinesSvg"></svg>
+
+        <!-- 4. LỚP PHAO CÂU ĐA CẦN THỦ NHẤP NHÔ TRÊN MẶT HỒ -->
+        <div class="lake-bobbers-layer" id="lakeBobbersLayer"></div>
+
+        <!-- 5. HỆ THỐNG CÁC CẦN THỦ NGỒI VÒNG QUANH HỒ (18 VỊ TRÍ BỜ HỒ) -->
+        <div class="shore-anglers-container" id="shoreAnglersContainer"></div>
+
+        <!-- 6. ĐIỂM TƯƠNG TÁC HAI BÊN HỒ CÂU -->
         <div class="fishing-hotspot hotspot-bait" id="spotBait" title="Bấm để Thả Thính Dụ Cá">
           <span class="hotspot-icon">🪱</span>
           <span class="hotspot-label">Thả Thính</span>
@@ -71,28 +87,8 @@
           <span class="hotspot-label">Báo Cá (<span id="statHorn">24</span>)</span>
         </div>
 
-        <!-- 5. CẦN THỦ TRƯỞNG TRÊN BẾN GỖ (GÓC DƯỚI PHẢI) -->
-        <div class="master-angler-station" id="masterAnglerStation">
-          <div class="angler-wish-bubble" id="anglerWishBubble">
-            “Thả mồi trùn quế, săn chú cá chép vàng 5 ký!”
-          </div>
-          <img
-            src="/assets/angler_master.png"
-            alt="Cần Thủ Trưởng"
-            class="angler-sprite-img"
-            id="anglerSpriteImg"
-          />
-          <div class="name-tag">
-            <div class="tag-avatar" id="anglerAvatar">🎣</div>
-            <div class="tag-texts">
-              <div class="tag-name" id="anglerName">Cần Thủ Hải Đăng</div>
-              <div class="tag-sub" id="anglerAction">✨ Quăng cần • Giỏ: 18.5kg</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 6. HÀNG 6 GHẾ CÂU VIP (TOP 6 CẦN THỦ BỜ HỒ) -->
-        <div class="vip-stools-layer" id="vipStoolsLayer"></div>
+        <!-- 7. DÒNG CHAT & HOẠT ĐỘNG TRỰC TIẾP NỔI TRÊN MÀN HÌNH (TIKTOK LIVE OVERLAY) -->
+        <div class="live-chat-overlay" id="liveChatOverlay"></div>
 
         <!-- 7. LỚP CANVAS HIỆU ỨNG BONG BÓNG, SÓNG NƯỚC, GIỌT NƯỚC BẮN & BÓNG CÁ -->
         <canvas id="fishingCanvas"></canvas>
@@ -101,36 +97,60 @@
         <footer class="bottom-hud-bar">
           <div class="hud-left-col">
             <div class="hud-active-notice" id="hudActiveNotice">
-              <span>🐟</span>
+              <img id="activeAnglerAvatar" class="hud-mini-avatar" src="" alt="" style="display:none;" />
+              <span id="activeAnglerIcon">🐟</span>
               <strong id="activeAnglerName">Cần Thủ Hải Đăng</strong>
               <span>—</span>
               <span id="activeActionTag">Vừa giật được Cá Chép Vàng 4.8kg</span>
               <span>🎣</span>
             </div>
 
-            <div class="hud-gift-cards">
-              <div class="hud-gift-card" id="cardBait" title="Bấm để Thả Thính">
-                <div class="gift-coin-tag">1 COIN / LIKE</div>
-                <div class="gift-card-body">
-                  <span class="gift-emoji">🪱</span>
-                  <span class="gift-title">Thả thính</span>
-                </div>
+            <!-- KHAY QUÀ TẶNG TIKTOK LIVE CHUẨN 9 MÓN TƯƠNG TÁC -->
+            <div class="hud-gift-tray" id="hudGiftTray">
+              <div class="hud-gift-chip" data-gift-id="hoa_hong" title="Hoa hồng (1 xu)">
+                <span class="chip-icon">🌹</span>
+                <span class="chip-name">Hoa hồng</span>
+                <span class="chip-coin">1🪙</span>
               </div>
-
-              <div class="hud-gift-card" id="cardCast" title="Bấm để Quăng Cần">
-                <div class="gift-coin-tag">5 COINS / CMT</div>
-                <div class="gift-card-body">
-                  <span class="gift-emoji">🎣</span>
-                  <span class="gift-title">Quăng cần</span>
-                </div>
+              <div class="hud-gift-chip" data-gift-id="dinh" title="Đỉnh (1 xu)">
+                <span class="chip-icon">🐱</span>
+                <span class="chip-name">Đỉnh</span>
+                <span class="chip-coin">1🪙</span>
               </div>
-
-              <div class="hud-gift-card" id="cardGourmet" title="Bấm để Dâng Mồi Thượng Hạng">
-                <div class="gift-coin-tag">10+ COINS</div>
-                <div class="gift-card-body">
-                  <span class="gift-emoji">🦐</span>
-                  <span class="gift-title">Mồi xịn</span>
-                </div>
+              <div class="hud-gift-chip" data-gift-id="gg" title="GG (1 xu)">
+                <span class="chip-icon">🎮</span>
+                <span class="chip-name">GG</span>
+                <span class="chip-coin">1🪙</span>
+              </div>
+              <div class="hud-gift-chip highlight-chip" data-gift-id="tay_cam" title="Tay cầm chơi game (100 xu)">
+                <span class="chip-icon">🕹️</span>
+                <span class="chip-name">Tay cầm</span>
+                <span class="chip-coin gold-coin">100🪙</span>
+              </div>
+              <div class="hud-gift-chip" data-gift-id="yeu_ban" title="Yêu bạn (1 xu)">
+                <span class="chip-icon">🥰</span>
+                <span class="chip-name">Yêu bạn</span>
+                <span class="chip-coin">1🪙</span>
+              </div>
+              <div class="hud-gift-chip highlight-chip" data-gift-id="chu_heo" title="Chú heo may mắn (10 xu)">
+                <span class="chip-icon">🐷</span>
+                <span class="chip-name">Chú heo</span>
+                <span class="chip-coin gold-coin">10🪙</span>
+              </div>
+              <div class="hud-gift-chip" data-gift-id="tiktok" title="TikTok (1 xu)">
+                <span class="chip-icon">🎵</span>
+                <span class="chip-name">TikTok</span>
+                <span class="chip-coin">1🪙</span>
+              </div>
+              <div class="hud-gift-chip highlight-chip" data-gift-id="ban_tim" title="Bắn tim (5 xu)">
+                <span class="chip-icon">🫰</span>
+                <span class="chip-name">Bắn tim</span>
+                <span class="chip-coin gold-coin">5🪙</span>
+              </div>
+              <div class="hud-gift-chip" data-gift-id="hieu_y" title="Hiểu ý tôi chứ (1 xu)">
+                <span class="chip-icon">😉</span>
+                <span class="chip-name">Hiểu ý</span>
+                <span class="chip-coin">1🪙</span>
               </div>
             </div>
           </div>
@@ -142,20 +162,36 @@
           </div>
         </footer>
 
-        <!-- BANNER ĐẠI CHIẾN THỦY QUÁI -->
+        <!-- BANNER ĐẠI CHIẾN THỦY QUÁI CÓ AVATAR -->
         <div class="leviathan-banner" id="leviathanBanner">
-          <div class="leviathan-title" id="leviathanTitle">🐉 ĐẠI CHIẾN THỦY QUÁI HỒ SÂU 🐉</div>
+          <div class="leviathan-top-row">
+            <div class="leviathan-avatar-wrap">
+              <img id="leviathanAvatar" class="leviathan-donor-avatar" src="" alt="" />
+              <span class="leviathan-crown">👑</span>
+            </div>
+            <div class="leviathan-title" id="leviathanTitle">🐉 ĐẠI CHIẾN THỦY QUÁI HỒ SÂU 🐉</div>
+          </div>
           <div class="leviathan-sub" id="leviathanSub">Cần thủ giật được Cá Rồng Kim Long Khổng Lồ!</div>
         </div>
 
-        <!-- MODAL CHIẾN TÍCH BẮT CÁ -->
+        <!-- MODAL CHIẾN TÍCH BẮT CÁ CÓ AVATAR CẦN THỦ -->
         <div class="catch-modal-overlay" id="catchModal">
           <div class="catch-card">
             <div class="catch-badge" id="catchBadge">QUÝ HIẾM</div>
             <div class="catch-icon" id="catchIcon">🐠</div>
             <div class="catch-fish-name" id="catchFishName">Cá Chép Vàng Cát Tường</div>
             <div class="catch-weight-pill" id="catchWeight">4.8 kg</div>
-            <div class="catch-angler-name" id="catchAnglerName">Cần Thủ: Hải Đăng</div>
+            
+            <div class="catch-angler-row">
+              <div class="catch-angler-avatar-box">
+                <img class="catch-angler-avatar-img" id="catchAnglerAvatarImg" src="" alt="" />
+              </div>
+              <div class="catch-angler-meta">
+                <div class="catch-angler-title" id="catchAnglerTitle">Cần Thủ Xuất Sắc</div>
+                <div class="catch-angler-name" id="catchAnglerName">Hải Đăng</div>
+              </div>
+            </div>
+
             <div class="catch-quote" id="catchQuote">“Chép vàng vượt vũ môn hóa rồng, rước đại cát đại lợi về nhà!”</div>
           </div>
         </div>
@@ -219,6 +255,21 @@
           <button class="dock-btn" id="btnRpcHorn">📯 Thổi Còi Báo Cá</button>
           <button class="dock-btn" id="btnRpcBigFish">🦐 Mồi Thượng Hạng</button>
           <button class="dock-btn gold" id="btnRpcLeviathan">🐉 Săn Thủy Quái (Quà Lớn)</button>
+        </div>
+      </div>
+
+      <div class="dock-section">
+        <div class="dock-section-title">🎁 Thử Nghiệm Quà Tặng TikTok Live</div>
+        <div class="dock-grid-3">
+          <button class="dock-btn-sm" data-sim-gift="hoa_hong">🌹 Hoa hồng (1🪙)</button>
+          <button class="dock-btn-sm" data-sim-gift="dinh">🐱 Đỉnh (1🪙)</button>
+          <button class="dock-btn-sm" data-sim-gift="gg">🎮 GG (1🪙)</button>
+          <button class="dock-btn-sm" data-sim-gift="ban_tim">🫰 Bắn tim (5🪙)</button>
+          <button class="dock-btn-sm" data-sim-gift="chu_heo">🐷 Chú heo (10🪙)</button>
+          <button class="dock-btn-sm gold" data-sim-gift="tay_cam">🕹️ Tay cầm (100🪙)</button>
+          <button class="dock-btn-sm" data-sim-gift="yeu_ban">🥰 Yêu bạn (1🪙)</button>
+          <button class="dock-btn-sm" data-sim-gift="tiktok">🎵 TikTok (1🪙)</button>
+          <button class="dock-btn-sm" data-sim-gift="hieu_y">😉 Hiểu ý (1🪙)</button>
         </div>
       </div>
 

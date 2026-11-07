@@ -36,12 +36,9 @@
   }
 
   // 4. Các phần tử DOM chính
-  const bobberBody = document.getElementById('bobberBody');
-  const anglerSpriteImg = document.getElementById('anglerSpriteImg');
-  const anglerWishBubble = document.getElementById('anglerWishBubble');
-  const anglerName = document.getElementById('anglerName');
-  const anglerAction = document.getElementById('anglerAction');
-  const anglerAvatar = document.getElementById('anglerAvatar');
+  const shoreAnglersContainer = document.getElementById('shoreAnglersContainer');
+  const lakeBobbersLayer = document.getElementById('lakeBobbersLayer');
+  const lakeFishingLinesSvg = document.getElementById('lakeFishingLinesSvg');
 
   const statCatches = document.getElementById('statCatches');
   const statWeight = document.getElementById('statWeight');
@@ -53,9 +50,25 @@
 
   const activeAnglerName = document.getElementById('activeAnglerName');
   const activeActionTag = document.getElementById('activeActionTag');
+  const activeAnglerAvatar = document.getElementById('activeAnglerAvatar');
+  const activeAnglerIcon = document.getElementById('activeAnglerIcon');
   const leaderboardList = document.getElementById('leaderboardList');
-  const vipStoolsLayer = document.getElementById('vipStoolsLayer');
   const eventFeed = document.getElementById('eventFeed');
+
+  // Mục tiêu cộng đồng & Chat nổi
+  const communityGoalBar = document.getElementById('communityGoalBar');
+  const cgTitle = document.getElementById('cgTitle');
+  const cgCurrent = document.getElementById('cgCurrent');
+  const cgTarget = document.getElementById('cgTarget');
+  const cgFill = document.getElementById('cgFill');
+  const liveChatOverlay = document.getElementById('liveChatOverlay');
+
+  // Gift Alert Toast
+  const giftAlertToast = document.getElementById('giftAlertToast');
+  const giftAlertAvatar = document.getElementById('giftAlertAvatar');
+  const giftAlertSender = document.getElementById('giftAlertSender');
+  const giftAlertAction = document.getElementById('giftAlertAction');
+  const giftAlertBadge = document.getElementById('giftAlertBadge');
 
   // Modal & Banner
   const catchModal = document.getElementById('catchModal');
@@ -64,11 +77,324 @@
   const catchFishName = document.getElementById('catchFishName');
   const catchWeight = document.getElementById('catchWeight');
   const catchAnglerName = document.getElementById('catchAnglerName');
+  const catchAnglerTitle = document.getElementById('catchAnglerTitle');
+  const catchAnglerAvatarImg = document.getElementById('catchAnglerAvatarImg');
   const catchQuote = document.getElementById('catchQuote');
 
   const leviathanBanner = document.getElementById('leviathanBanner');
   const leviathanTitle = document.getElementById('leviathanTitle');
   const leviathanSub = document.getElementById('leviathanSub');
+  const leviathanAvatar = document.getElementById('leviathanAvatar');
+
+  // Helper avatar fallback an toàn
+  function getSafeAvatarUrl(avatarUrl, user) {
+    if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.startsWith('http')) {
+      return avatarUrl;
+    }
+    const seed = encodeURIComponent(user || 'Angler');
+    return `https://api.dicebear.com/7.x/bottts/svg?seed=${seed}`;
+  }
+
+  function updateAvatarElement(imgElem, fallbackElem, avatarUrl, user) {
+    if (!imgElem) return;
+    const url = getSafeAvatarUrl(avatarUrl, user);
+    imgElem.src = url;
+    imgElem.style.display = 'block';
+    if (fallbackElem) fallbackElem.style.display = 'none';
+    imgElem.onerror = () => {
+      imgElem.onerror = null;
+      imgElem.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(user || 'user')}`;
+    };
+  }
+
+  // Helper hiển thị dòng chat nổi phong cách TikTok Live
+  function appendLiveChatPill({ user, avatar, comment, isGift = false }) {
+    if (!liveChatOverlay) return;
+    const pill = document.createElement('div');
+    pill.className = `chat-pill ${isGift ? 'gift-pill' : ''}`;
+    const avatarUrl = getSafeAvatarUrl(avatar, user);
+    pill.innerHTML = `
+      <img src="${avatarUrl}" class="chat-pill-avatar" alt="" onerror="this.onerror=null; this.src='https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(user)}'" />
+      <div class="chat-pill-content">
+        <div class="chat-pill-user">${user}</div>
+        <div class="chat-pill-text">${comment}</div>
+      </div>
+    `;
+    liveChatOverlay.appendChild(pill);
+    while (liveChatOverlay.children.length > 5) {
+      liveChatOverlay.removeChild(liveChatOverlay.firstChild);
+    }
+    setTimeout(() => {
+      if (pill && pill.parentNode === liveChatOverlay) {
+        pill.style.opacity = '0';
+        pill.style.transition = 'opacity 0.6s ease';
+        setTimeout(() => {
+          if (pill && pill.parentNode === liveChatOverlay) {
+            liveChatOverlay.removeChild(pill);
+          }
+        }, 600);
+      }
+    }, 6500);
+  }
+
+  // Helper hiển thị Popup Toast thông báo Donate Quà Tặng
+  let giftToastTimer = null;
+  function showGiftAlert(ev) {
+    if (!giftAlertToast) return;
+    if (giftAlertAvatar) {
+      giftAlertAvatar.src = getSafeAvatarUrl(ev.avatar, ev.user);
+      giftAlertAvatar.onerror = () => {
+        giftAlertAvatar.onerror = null;
+        giftAlertAvatar.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(ev.user || 'vip')}`;
+      };
+    }
+    if (giftAlertSender) giftAlertSender.textContent = ev.user;
+    if (giftAlertAction) {
+      const rep = ev.repeatCount > 1 ? `x${ev.repeatCount}` : '';
+      giftAlertAction.innerHTML = `Vừa tặng <strong>${ev.giftName || 'Quà Tặng'}</strong> ${ev.giftIcon || '🎁'} ${rep}`;
+    }
+    if (giftAlertBadge) {
+      giftAlertBadge.textContent = `${ev.coins || 1} 🪙`;
+    }
+
+    giftAlertToast.classList.add('active');
+    clearTimeout(giftToastTimer);
+    giftToastTimer = setTimeout(() => {
+      giftAlertToast.classList.remove('active');
+    }, 4500);
+  }
+
+  // 4.3. HỆ THỐNG ĐA CẦN THỦ NGỒI VÒNG QUANH HỒ (SHORE ANGLERS RING)
+  let cachedLakeAnglers = [];
+
+  function calculateRodTip(a) {
+    let rodTipX = a.shoreX;
+    let rodTipY = a.shoreY;
+    if (a.dir === 'down') {
+      rodTipX = a.shoreX + 18;
+      rodTipY = a.shoreY + 45;
+    } else if (a.dir === 'right') {
+      rodTipX = a.shoreX + 48;
+      rodTipY = a.shoreY + 12;
+    } else if (a.dir === 'left') {
+      rodTipX = a.shoreX - 48;
+      rodTipY = a.shoreY + 12;
+    } else if (a.dir === 'up') {
+      rodTipX = a.shoreX - 12;
+      rodTipY = a.shoreY - 55;
+    }
+    return { rodTipX, rodTipY };
+  }
+
+  function renderShoreRingSystem(anglers) {
+    if (!Array.isArray(anglers)) return;
+    cachedLakeAnglers = anglers;
+
+    // A. Vẽ các cần thủ ngồi ven bờ hồ
+    if (shoreAnglersContainer) {
+      shoreAnglersContainer.innerHTML = '';
+      anglers.forEach((a) => {
+        const seat = document.createElement('div');
+        seat.id = `shoreSeat_${a.slotIndex}`;
+        seat.className = `shore-angler-seat dir-${a.dir || 'up'}${a.rank <= 3 ? ' rank-' + a.rank : ''}`;
+        seat.style.left = `${a.shoreX}px`;
+        seat.style.top = `${a.shoreY}px`;
+        seat.style.setProperty('--slot-scale', a.scale || 1);
+        seat.style.setProperty('--slot-z', a.zIndex || 14);
+
+        const avatarUrl = getSafeAvatarUrl(a.avatar, a.user);
+        const rankMedal = a.rank === 1 ? '🥇' : a.rank === 2 ? '🥈' : a.rank === 3 ? '🥉' : `#${a.rank}`;
+        const hatHtml = a.rank === 1
+          ? '<span class="crown-top1">👑</span>'
+          : '<div class="vietnamese-non-la"></div>';
+
+        seat.innerHTML = `
+          <div class="angler-speech-bubble" id="speechBubble_${a.slotIndex}">${a.wish || 'Đang thả mồi săn cá to...'}</div>
+          <div class="angler-assembly">
+            <div class="angler-camp-chair"></div>
+            <div class="angler-fish-creel">
+              <span class="creel-count-tag" id="creelCount_${a.slotIndex}">${a.catchesCount || (a.fish ? 1 : 0)}</span>
+            </div>
+            <div class="angler-body-figure">
+              <div class="angler-hat-crown">${hatHtml}</div>
+              <div class="angler-head-avatar">
+                <img src="${avatarUrl}" class="angler-avatar-face" alt="${a.user}" onerror="this.onerror=null; this.src='https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(a.user)}'" />
+              </div>
+              <div class="angler-vest-torso">
+                <div class="vest-pocket"></div>
+                <div class="vest-pocket"></div>
+              </div>
+            </div>
+            <div class="angler-fishing-rod-wrap">
+              <div class="rod-carbon-pole">
+                <div class="rod-tip-guide"></div>
+              </div>
+            </div>
+          </div>
+          <div class="angler-seat-tag">
+            <span class="seat-rank-badge">${rankMedal}</span>
+            <span class="seat-user-name">${a.user}</span>
+            <span class="seat-catch-kg">${a.totalWeightKg || 0}kg</span>
+          </div>
+        `;
+
+        seat.addEventListener('click', () => {
+          window.FishingAudio?.ensureContext();
+          callRpc('fishing.hookFish', { user: a.user, uniqueId: a.uniqueId, avatar: a.avatar });
+        });
+
+        shoreAnglersContainer.appendChild(seat);
+      });
+    }
+
+    // B. Vẽ các phao câu nổi trên mặt hồ
+    if (lakeBobbersLayer) {
+      lakeBobbersLayer.innerHTML = '';
+      anglers.forEach((a) => {
+        const buoy = document.createElement('div');
+        buoy.id = `lakeBobber_${a.slotIndex}`;
+        buoy.className = 'lake-bobber-buoy';
+        buoy.style.left = `${a.waterX}px`;
+        buoy.style.top = `${a.waterY}px`;
+
+        buoy.innerHTML = `
+          <div class="bobber-body-unit">
+            <div class="bobber-antenna-tip"></div>
+            <div class="bobber-egg-float"></div>
+          </div>
+          <div class="bobber-ripples-ring-wrap">
+            <div class="bobber-lake-ripple"></div>
+            <div class="bobber-lake-ripple"></div>
+          </div>
+          <div class="bobber-user-micro-tag">${a.user}</div>
+        `;
+
+        buoy.addEventListener('click', () => {
+          window.FishingAudio?.ensureContext();
+          callRpc('fishing.hookFish', { user: a.user, uniqueId: a.uniqueId, avatar: a.avatar });
+        });
+
+        lakeBobbersLayer.appendChild(buoy);
+      });
+    }
+
+    // C. Vẽ các đường dây cước câu mềm mại bằng SVG
+    if (lakeFishingLinesSvg) {
+      lakeFishingLinesSvg.innerHTML = '';
+      anglers.forEach((a) => {
+        const { rodTipX, rodTipY } = calculateRodTip(a);
+        const midX = (rodTipX + a.waterX) / 2;
+        const midY = (rodTipY + a.waterY) / 2 + 25;
+        const d = `M ${rodTipX} ${rodTipY} Q ${midX} ${midY} ${a.waterX} ${a.waterY}`;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('id', `linePath_${a.slotIndex}`);
+        path.setAttribute('class', 'lake-line-path');
+        path.setAttribute('d', d);
+        lakeFishingLinesSvg.appendChild(path);
+      });
+    }
+  }
+
+  function triggerShoreSlotAction(slotIndex, actionType, ev) {
+    if (slotIndex === undefined || slotIndex === null || slotIndex < 0) return;
+    const seat = document.getElementById(`shoreSeat_${slotIndex}`);
+    const buoy = document.getElementById(`lakeBobber_${slotIndex}`);
+    const line = document.getElementById(`linePath_${slotIndex}`);
+    const bubble = document.getElementById(`speechBubble_${slotIndex}`);
+    const creel = document.getElementById(`creelCount_${slotIndex}`);
+
+    if (actionType === 'hookFish' || actionType === 'catchBigFish' || actionType === 'catchLeviathan' || actionType === 'gift') {
+      if (seat) {
+        seat.classList.add('reeling');
+        setTimeout(() => seat.classList.remove('reeling'), 3200);
+      }
+      if (buoy) {
+        buoy.classList.add('hooked');
+        setTimeout(() => buoy.classList.remove('hooked'), 3200);
+      }
+      if (line) {
+        line.classList.add('reeling');
+        setTimeout(() => line.classList.remove('reeling'), 3200);
+      }
+      if (creel && ev.fish) {
+        const cur = parseInt(creel.textContent || '0', 10);
+        creel.textContent = cur + 1;
+      }
+      if (bubble) {
+        clearInterval(bubble._cdTimer);
+        let text = ev.wish || '';
+        if (ev.type === 'gift') {
+          text = `🎁 Cảm ơn quà ${ev.giftName || ''}! Bắt được ${ev.fish?.name || 'cá to'}!`;
+        } else if (ev.fish) {
+          text = `🎉 Giật được ${ev.fish.name} (${ev.weightKg}kg)!`;
+        }
+        bubble.textContent = text;
+        bubble.classList.add('active');
+        clearTimeout(bubble._bubbleTimer);
+        bubble._bubbleTimer = setTimeout(() => bubble.classList.remove('active'), 5000);
+      }
+    } else if (actionType === 'castRod') {
+      if (line) {
+        line.classList.add('reeling');
+        setTimeout(() => line.classList.remove('reeling'), 800);
+      }
+      if (bubble) {
+        clearInterval(bubble._cdTimer);
+        let secLeft = ev.durationSec || ev.remainingSec || 60;
+        bubble.textContent = `⏱️ Đang đợi cá... ${secLeft}s`;
+        bubble.classList.add('active');
+        bubble._cdTimer = setInterval(() => {
+          secLeft--;
+          if (secLeft > 0) {
+            bubble.textContent = `⏱️ Đang đợi cá... ${secLeft}s`;
+          } else {
+            clearInterval(bubble._cdTimer);
+            bubble.textContent = '🐟 Cá đang đớp phao! Sắp giật!';
+          }
+        }, 1000);
+      }
+    } else if (actionType === 'waitingFish') {
+      if (bubble) {
+        clearInterval(bubble._cdTimer);
+        let secLeft = ev.remainingSec || 30;
+        bubble.textContent = `⏳ Đang câu cá... Còn ${secLeft}s nữa!`;
+        bubble.classList.add('active');
+        bubble._cdTimer = setInterval(() => {
+          secLeft--;
+          if (secLeft > 0) {
+            bubble.textContent = `⏳ Đang câu cá... Còn ${secLeft}s nữa!`;
+          } else {
+            clearInterval(bubble._cdTimer);
+            bubble.textContent = '🐟 Cá đang đớp phao!';
+          }
+        }, 1000);
+      }
+    } else if (bubble) {
+      let text = ev.wish || '';
+      if (actionType === 'soundHorn') text = '📯 Báo cá! Chúc cả bến hồ cùng phát tài!';
+      else if (actionType === 'castBait') text = `🪱 Thả ${ev.count || 5} nắm thính thơm!`;
+      if (text) {
+        bubble.textContent = text;
+        bubble.classList.add('active');
+        clearTimeout(bubble._bubbleTimer);
+        bubble._bubbleTimer = setTimeout(() => bubble.classList.remove('active'), 4500);
+      }
+    }
+
+    // Hiệu ứng hạt nước tại phao của cần thủ đó
+    const targetAngler = cachedLakeAnglers.find(a => a.slotIndex === slotIndex);
+    if (targetAngler && particleEngine) {
+      const isBig = ev.type === 'catchBigFish' || ev.type === 'catchLeviathan' || (ev.coins && ev.coins >= 5);
+      if (ev.type === 'castBait') {
+        particleEngine.addBaitDrop(targetAngler.waterX, targetAngler.waterY, ev.count || 3);
+      } else if (actionType === 'castRod') {
+        particleEngine.addBaitDrop(targetAngler.waterX, targetAngler.waterY, 1);
+      } else if (actionType !== 'waitingFish') {
+        particleEngine.addFishCatch(targetAngler.waterX, targetAngler.waterY, isBig);
+      }
+    }
+  }
 
   // 5. Kết nối WebSocket (/ws)
   let ws = null;
@@ -111,6 +437,29 @@
     if (msg.method === 'fishing.state' || msg.method === 'temple.state') {
       updatePublicState(msg.params);
     }
+    // Sự kiện chat trực tiếp kèm avatar
+    else if (msg.method === 'fishing.chat') {
+      const chatData = msg.params;
+      if (chatData) {
+        appendLiveChatPill({
+          user: chatData.user,
+          avatar: chatData.avatar,
+          comment: chatData.comment,
+          isGift: false
+        });
+      }
+    }
+    // Sự kiện giờ vàng bão cá
+    else if (msg.method === 'fishing.frenzy') {
+      window.FishingAudio?.playCelebrationChime();
+      if (communityGoalBar) {
+        communityGoalBar.classList.add('frenzy-active');
+        if (cgTitle) cgTitle.textContent = '🔥 GIỜ VÀNG BÃO CÁ HỒ SÂU (X2) 🔥';
+      }
+      if (particleEngine) {
+        particleEngine.addFishCatch(540, 1150, true);
+      }
+    }
     // Sự kiện tương tác thời gian thực
     else if (msg.method === 'fishing.event' || msg.method === 'temple.event') {
       const eventData = msg.params?.event;
@@ -139,10 +488,32 @@
     if (statBait) statBait.textContent = st.totalBait ?? 0;
     if (statHorn) statHorn.textContent = st.hornsBlown ?? 0;
 
+    // Cập nhật mục tiêu cộng đồng
+    if (st.communityGoal && communityGoalBar) {
+      const cur = st.communityGoal.current || 0;
+      const tgt = st.communityGoal.target || 500;
+      if (cgCurrent) cgCurrent.textContent = cur;
+      if (cgTarget) cgTarget.textContent = tgt;
+      const pct = Math.min(100, Math.max(0, Math.round((cur / tgt) * 100)));
+      if (cgFill) cgFill.style.width = `${pct}%`;
+
+      const isFrenzy = !!st.communityGoal.frenzyActive;
+      communityGoalBar.classList.toggle('frenzy-active', isFrenzy);
+      if (cgTitle) {
+        cgTitle.textContent = isFrenzy
+          ? '🔥 GIỜ VÀNG BÃO CÁ HỒ SÂU (X2) 🔥'
+          : '🌊 MỤC TIÊU BÃO CÁ CỘNG ĐỒNG';
+      }
+    }
+
+    // Cập nhật hệ thống cần thủ ngồi vòng quanh bờ hồ (18 vị trí)
+    if (Array.isArray(st.activeAnglers)) {
+      renderShoreRingSystem(st.activeAnglers);
+    }
+
     // Cập nhật bảng xếp hạng VUA SÁT CÁ
     if (leaderboardList && Array.isArray(st.leaderboard)) {
       renderLeaderboard(st.leaderboard);
-      renderVipStools(st.leaderboard);
     }
 
     // Cập nhật trạng thái TikTok
@@ -177,26 +548,6 @@
     });
   }
 
-  function renderVipStools(board) {
-    if (!vipStoolsLayer) return;
-    vipStoolsLayer.innerHTML = '';
-    board.slice(0, 6).forEach((item) => {
-      const card = document.createElement('div');
-      card.className = 'vip-stool-card';
-      const avatarContent = item.avatar
-        ? `<img src="${item.avatar}" class="stool-avatar" alt="" />`
-        : `<div class="stool-avatar">🎣</div>`;
-
-      card.innerHTML = `
-        <div class="stool-rank-tag">TOP ${item.rank}</div>
-        ${avatarContent}
-        <div class="stool-name" title="${item.name}">${item.name}</div>
-        <div class="stool-weight">${item.totalWeightKg}kg</div>
-      `;
-      vipStoolsLayer.appendChild(card);
-    });
-  }
-
   // 7. Xử lý hoạt ảnh sự kiện tương tác
   let catchModalTimer = null;
   let bannerTimer = null;
@@ -204,30 +555,132 @@
   function handleFishingEvent(ev) {
     appendEventFeed(ev);
 
+    // Kích hoạt hoạt ảnh cần thủ cụ thể trên bờ hồ
+    let slotIdx = ev.slotIndex;
+    if ((slotIdx === undefined || slotIdx === null) && cachedLakeAnglers.length > 0) {
+      const matched = cachedLakeAnglers.find(a => (ev.uniqueId && a.uniqueId === ev.uniqueId) || a.user === ev.user);
+      if (matched) slotIdx = matched.slotIndex;
+    }
+    if (slotIdx !== undefined && slotIdx !== null) {
+      triggerShoreSlotAction(slotIdx, ev.type, ev);
+    }
+
+    // Cập nhật Avatar & Tên trên thanh thông báo HUD đáy
+    updateAvatarElement(activeAnglerAvatar, null, ev.avatar, ev.user);
+    if (activeAnglerName) activeAnglerName.textContent = ev.user;
+
     // Kích hoạt âm thanh & giọng đọc
     const audio = window.FishingAudio;
 
     switch (ev.type) {
+      // 0. Tặng quà TikTok Live (Hoa hồng, Đỉnh, GG, Tay cầm, Bắn tim, Chú heo...)
+      case 'gift':
+        const isLeviathanGift = !!ev.isLeviathan;
+
+        // Âm thanh quà tặng fanfare
+        if (audio) {
+          audio.playGiftFanfare(ev.coins || 1);
+          setTimeout(() => audio.playFishSplash(), 300);
+        }
+
+        // Hiển thị Popup Toast quà tặng nổi bật
+        showGiftAlert(ev);
+
+        // Hiển thị pill quà tặng trên Live Chat stream
+        appendLiveChatPill({
+          user: ev.user,
+          avatar: ev.avatar,
+          comment: `🎁 Đã tặng ${ev.giftName} ${ev.giftIcon} (${ev.coins} xu)!`,
+          isGift: true
+        });
+
+        if (activeActionTag) activeActionTag.textContent = `Vừa tặng ${ev.giftName} (${ev.coins} xu)`;
+
+        // Banner Thủy Quái nếu quà lớn >= 100 xu (Tay cầm chơi game)
+        if (isLeviathanGift && leviathanBanner) {
+          if (leviathanAvatar) {
+            leviathanAvatar.src = getSafeAvatarUrl(ev.avatar, ev.user);
+            leviathanAvatar.onerror = () => {
+              leviathanAvatar.onerror = null;
+              leviathanAvatar.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(ev.user)}`;
+            };
+          }
+          leviathanTitle.textContent = `🐉 ${ev.fish?.name?.toUpperCase() || 'THỦY QUÁI XUẤT THẾ'} 🐉`;
+          leviathanSub.textContent = `Đại gia ${ev.user} tặng ${ev.giftName}, kéo lên ${ev.fish?.name || 'Thủy Quái'} (${ev.weightKg}kg)!`;
+          leviathanBanner.classList.add('active');
+          clearTimeout(bannerTimer);
+          bannerTimer = setTimeout(() => {
+            leviathanBanner.classList.remove('active');
+          }, 7500);
+        }
+
+        // Mở Modal Chiến Tích Bắt Cá đồng bộ Avatar & Giọng Đọc
+        if (ev.fish && catchModal) {
+          catchBadge.textContent = ev.fish.rarity || 'QUÝ HIẾM';
+          catchBadge.style.background = ev.fish.badgeColor || '#fbc02d';
+          catchIcon.textContent = ev.fish.icon || '🐟';
+          catchFishName.textContent = ev.fish.name || 'Cá Quý';
+          catchWeight.textContent = `${ev.weightKg} kg`;
+          if (catchAnglerAvatarImg) catchAnglerAvatarImg.src = getSafeAvatarUrl(ev.avatar, ev.user);
+          if (catchAnglerTitle) catchAnglerTitle.textContent = `Đại Gia Tặng ${ev.giftName} 👑`;
+          if (catchAnglerName) catchAnglerName.textContent = ev.user;
+          catchQuote.textContent = `“${ev.fish.quote || ''}”`;
+
+          catchModal.classList.add('active');
+          clearTimeout(catchModalTimer);
+          catchModalTimer = setTimeout(() => {
+            catchModal.classList.remove('active');
+          }, 6500);
+        }
+
+        // Phát giọng đọc ZeroTTS
+        if (ev.ttsText && audio) {
+          audio.enqueueTts(ev.ttsText, {
+            onStart: () => {
+              if (catchModal && !catchModal.classList.contains('active')) {
+                catchModal.classList.add('active');
+              }
+            },
+            onEnd: () => {
+              if (catchModal) catchModal.classList.remove('active');
+            }
+          });
+        }
+        break;
+
       // 1. Thả thính / Ném mồi
       case 'castBait':
         if (audio) audio.playWaterDrop();
-        if (particleEngine) particleEngine.addBaitDrop(540, 1150, ev.count || 1);
-        if (activeAnglerName) activeAnglerName.textContent = ev.user;
         if (activeActionTag) activeActionTag.textContent = `Thả ${ev.count || 1} nắm thính thơm`;
+        appendLiveChatPill({
+          user: ev.user,
+          avatar: ev.avatar,
+          comment: `🪱 Thả ${ev.count || 1} nắm thính thơm dụ cá`
+        });
         break;
 
-      // 2. Quăng cần
+      // 1.5. Đang kiên nhẫn đợi cá cắn câu
+      case 'waitingFish':
+        if (activeActionTag) activeActionTag.textContent = `Đang đợi cá cắn câu (còn ${ev.remainingSec}s)`;
+        appendLiveChatPill({
+          user: ev.user,
+          avatar: ev.avatar,
+          comment: `⏳ Đang buông cần... Còn ${ev.remainingSec}s cá sẽ cắn!`
+        });
+        break;
+
+      // 2. Quăng cần (Khởi đầu phiên câu 1 phút)
       case 'castRod':
         if (audio) {
           audio.playRodWhoosh();
           audio.playWaterDrop(1.2);
         }
-        if (particleEngine) particleEngine.addBaitDrop(540, 1150, 2);
-        if (anglerWishBubble) anglerWishBubble.textContent = `“${ev.wish || 'Quăng cần thả phao!'}”`;
-        if (anglerName) anglerName.textContent = ev.user;
-        if (anglerAction) anglerAction.textContent = '✨ Quăng cần thả phao';
-        if (activeAnglerName) activeAnglerName.textContent = ev.user;
-        if (activeActionTag) activeActionTag.textContent = 'Vừa vung cần thả phao';
+        if (activeActionTag) activeActionTag.textContent = 'Buông cần câu cá (đợi 1 phút)';
+        appendLiveChatPill({
+          user: ev.user,
+          avatar: ev.avatar,
+          comment: `🎣 Buông cần câu cá: ${ev.wish || 'Chờ 1 phút cá cắn câu'} ⏱️`
+        });
 
         if (ev.ttsText && audio) {
           audio.enqueueTts(ev.ttsText);
@@ -241,18 +694,6 @@
         const isLeviathan = ev.type === 'catchLeviathan';
         const isBig = ev.type === 'catchBigFish' || isLeviathan;
 
-        // Rung lắc phao câu
-        if (bobberBody) {
-          bobberBody.classList.add('hooked');
-          setTimeout(() => bobberBody.classList.remove('hooked'), 3200);
-        }
-
-        // Cần thủ giật cần
-        if (anglerSpriteImg) {
-          anglerSpriteImg.classList.add('reeling');
-          setTimeout(() => anglerSpriteImg.classList.remove('reeling'), 3000);
-        }
-
         // Âm thanh
         if (audio) {
           audio.playReelClick(12, 35);
@@ -262,33 +703,26 @@
           }
         }
 
-        // Hiệu ứng hạt nước
-        if (particleEngine) {
-          particleEngine.addFishCatch(540, 1150, isBig);
-        }
-
-        // Cập nhật thông tin cần thủ
-        if (anglerWishBubble && ev.wish) {
-          anglerWishBubble.textContent = `“${ev.wish}”`;
-        }
-        if (anglerName) anglerName.textContent = ev.user;
-        if (anglerAction) {
-          anglerAction.textContent = `🐟 Bắt được ${ev.fish?.name || 'Cá'} (${ev.weightKg}kg)`;
-        }
-
-        if (activeAnglerName) activeAnglerName.textContent = ev.user;
         if (activeActionTag) {
           activeActionTag.textContent = `Vừa giật được ${ev.fish?.name || 'Cá to'} ${ev.weightKg}kg`;
         }
 
-        // Mở Modal Chiến Tích Bắt Cá đồng bộ Giọng Đọc
+        appendLiveChatPill({
+          user: ev.user,
+          avatar: ev.avatar,
+          comment: `🐟 Giật được ${ev.fish?.name || 'Cá'} (${ev.weightKg}kg)!`
+        });
+
+        // Mở Modal Chiến Tích Bắt Cá đồng bộ Giọng Đọc & Avatar
         if (ev.fish && catchModal) {
           catchBadge.textContent = ev.fish.rarity || 'PHỔ THÔNG';
           catchBadge.style.background = ev.fish.badgeColor || '#fbc02d';
           catchIcon.textContent = ev.fish.icon || '🐟';
           catchFishName.textContent = ev.fish.name || 'Cá Nước Ngọt';
           catchWeight.textContent = `${ev.weightKg} kg`;
-          catchAnglerName.textContent = `Cần Thủ: ${ev.user}`;
+          if (catchAnglerAvatarImg) catchAnglerAvatarImg.src = getSafeAvatarUrl(ev.avatar, ev.user);
+          if (catchAnglerTitle) catchAnglerTitle.textContent = ev.title || 'Cần Thủ Bờ Hồ';
+          if (catchAnglerName) catchAnglerName.textContent = ev.user;
           catchQuote.textContent = `“${ev.fish.quote || ''}”`;
 
           catchModal.classList.add('active');
@@ -296,17 +730,6 @@
           catchModalTimer = setTimeout(() => {
             catchModal.classList.remove('active');
           }, 6500);
-        }
-
-        // Banner Thủy Quái
-        if (isLeviathan && leviathanBanner) {
-          leviathanTitle.textContent = `🐉 ${ev.fish?.name?.toUpperCase() || 'THỦY QUÁI XUẤT THẾ'} 🐉`;
-          leviathanSub.textContent = `Đại cần thủ ${ev.user} bắt được thủy quái nặng ${ev.weightKg}kg!`;
-          leviathanBanner.classList.add('active');
-          clearTimeout(bannerTimer);
-          bannerTimer = setTimeout(() => {
-            leviathanBanner.classList.remove('active');
-          }, 7000);
         }
 
         // Phát giọng đọc ZeroTTS
@@ -327,9 +750,12 @@
       // 4. Thổi còi báo cá
       case 'soundHorn':
         if (audio) audio.playAirHorn();
-        if (particleEngine) particleEngine.addFishCatch(540, 1150, false);
-        if (activeAnglerName) activeAnglerName.textContent = ev.user;
         if (activeActionTag) activeActionTag.textContent = 'Thổi còi báo cá vang rền bến hồ';
+        appendLiveChatPill({
+          user: ev.user,
+          avatar: ev.avatar,
+          comment: `📯 Thổi còi báo cá rộn rã bến hồ!`
+        });
         if (ev.ttsText && audio) {
           audio.enqueueTts(ev.ttsText);
         }
@@ -416,23 +842,24 @@
     });
   }
 
-  // Thẻ quà HUD đáy
-  document.getElementById('cardBait')?.addEventListener('click', () => {
-    window.FishingAudio?.ensureContext();
-    const { user } = getAnglerInputs();
-    callRpc('fishing.castBait', { user, count: 5 });
+  // Khay quà tặng TikTok Live 9 món ở HUD đáy
+  document.querySelectorAll('.hud-gift-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      window.FishingAudio?.ensureContext();
+      const giftId = chip.getAttribute('data-gift-id');
+      const { user } = getAnglerInputs();
+      callRpc('fishing.sendGift', { user, giftId });
+    });
   });
 
-  document.getElementById('cardCast')?.addEventListener('click', () => {
-    window.FishingAudio?.ensureContext();
-    const { user, wish } = getAnglerInputs();
-    callRpc('fishing.castRod', { user, wish });
-  });
-
-  document.getElementById('cardGourmet')?.addEventListener('click', () => {
-    window.FishingAudio?.ensureContext();
-    const { user } = getAnglerInputs();
-    callRpc('fishing.catchBigFish', { user, coins: 20 });
+  // Nút test quà tặng trong Quick Dock
+  document.querySelectorAll('[data-sim-gift]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      window.FishingAudio?.ensureContext();
+      const giftId = btn.getAttribute('data-sim-gift');
+      const { user } = getAnglerInputs();
+      callRpc('fishing.sendGift', { user, giftId });
+    });
   });
 
   // Nút Quick Dock

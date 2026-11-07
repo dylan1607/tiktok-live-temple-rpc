@@ -361,6 +361,74 @@ class FishingAudioEngine {
   }
 
   // --------------------------------------------------------------------------
+  // 7.1. TIẾNG ĂN MỪNG TẶNG QUÀ TIKTOK LIVE (GIFT FANFARE)
+  // --------------------------------------------------------------------------
+  playGiftFanfare(coins = 1) {
+    if (!this.sfxEnabled) return;
+    try {
+      const ctx = this.ensureContext();
+      if (coins >= 100) {
+        // Royal Brass & Chime (Grand Tay Cầm Chơi Game / Thủy Quái)
+        const notes = [440, 554.37, 659.25, 880, 1108.73];
+        notes.forEach((freq, i) => {
+          setTimeout(() => {
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now);
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(0.24, now + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.6);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 1.7);
+          }, i * 90);
+        });
+      } else if (coins >= 10) {
+        // Chú heo may mắn fanfare
+        const notes = [587.33, 739.99, 880, 1174.66];
+        notes.forEach((freq, i) => {
+          setTimeout(() => {
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now);
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(0.20, now + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 1.3);
+          }, i * 100);
+        });
+      } else {
+        // Hoa hồng / Bắn tim / Nháy mắt coin ding
+        const notes = [880, 1318.51];
+        notes.forEach((freq, i) => {
+          setTimeout(() => {
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now);
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(0.16, now + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.65);
+          }, i * 80);
+        });
+      }
+    } catch (_) {}
+  }
+
+  // --------------------------------------------------------------------------
   // 8. HÀNG ĐỢI ZEROTTS (VOICE QUEUE)
   // --------------------------------------------------------------------------
   enqueueTts(text, options = {}) {
